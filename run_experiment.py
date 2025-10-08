@@ -2,7 +2,7 @@ import sys
 
 from PySide6 import QtCore, QtStateMachine, QtWidgets
 
-import experiment_pages
+import experiment_controller
 import participant_page
 
 QState = QtStateMachine.QState
@@ -11,7 +11,7 @@ QStateMachine = QtStateMachine.QStateMachine
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    experimenter_window = experiment_pages.ExperimenterWindow()
+    experimenter_window = experiment_controller.ExperimenterWindow()
     participant_window = participant_page.ParticipantWindow()
 
     # Place on two displays if present
