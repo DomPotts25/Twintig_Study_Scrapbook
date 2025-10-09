@@ -1,7 +1,7 @@
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Pages.setup_page import Setup1Page, Setup2Page, TrialCheckPage
+from Pages.setup_page import SetupPage, TrialCheckPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
 from Pages.trial_pages import RunTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage
@@ -16,19 +16,14 @@ def add_edge(g, a, b):
 
 GRAPH = {}
 
-# Setup1 <-> Setup2 / StillCalib / ROM_1_Calib / ROM_2_Calib / Midair_Calib
-for tgt in ["Setup2", "StillCalib", "ROM_1_Calib", "ROM_2_Calib", "Midair_Calib"]:
-    add_edge(GRAPH, "Setup1", tgt)
-    add_edge(GRAPH, tgt, "Setup1")
-
-# Setup2 <-> Setup3 / Velocity_Calib
-for tgt in ["Setup3", "Velocity_Calib"]:
-    add_edge(GRAPH, "Setup2", tgt)
-    add_edge(GRAPH, tgt, "Setup2")
+# Setup <-> TrialCheck / StillCalib / ROM_1_Calib / ROM_2_Calib / Midair_Calib
+for tgt in ["TrialCheck", "StillCalib", "ROM_1_Calib", "ROM_2_Calib", "Midair_Calib", "Velocity_Calib"]:
+    add_edge(GRAPH, "Setup", tgt)
+    add_edge(GRAPH, tgt, "Setup")
 
 # Setup3 <-> TrialCheck
-add_edge(GRAPH, "Setup3", "TrialCheck")
-add_edge(GRAPH, "TrialCheck", "Setup3")
+# add_edge(GRAPH, "Setup3", "TrialCheck")
+# add_edge(GRAPH, "TrialCheck", "Setup3")
 
 # TrialCheck -> RunTrials (one-way)
 add_edge(GRAPH, "TrialCheck", "RunTrials")
@@ -48,9 +43,9 @@ ALL_PAGES = sorted({*GRAPH.keys(), *(n for outs in GRAPH.values() for n in outs)
 # ----------- 2) Navigation policy (what appears in the main nav bar) -----------
 # Buttons shown per page (subset of GRAPH[page])
 MAIN_NAV = {
-    "Setup1": ["Setup2"],  # only Setup2 in main nav
-    "Setup2": ["Setup3"],  # only Setup3 in main nav
-    "Setup3": ["TrialCheck"],  # only TrialCheck in main nav
+    "Setup": ["TrialCheck"],  # only Setup2 in main nav
+    #"Setup2": ["Setup3"],  # only Setup3 in main nav
+    #"Setup3": ["TrialCheck"],  # only TrialCheck in main nav
     "TrialCheck": ["RunTrials"],  # only RunTrials in main nav
     "RunTrials": [],  # controller-driven only
     "GestureChange": ["RunTrials"],
@@ -64,22 +59,22 @@ MAIN_NAV = {
     "EndTrials": [],
 }
 
-# Fixed back buttons (no history). Added Setup3->Setup2, Setup2->Setup1. No back for Setup1.
+# Fixed back buttons (no history). Added Setup3->Setup2, Setup2->Setup. No back for Setup.
 MAIN_BACK = {
-    "Setup3": "Setup2",
-    "Setup2": "Setup1",
-    "StillCalib": "Setup1",
-    "ROM_1_Calib": "Setup1",
-    "ROM_2_Calib": "Setup1",
-    "Midair_Calib": "Setup1",
-    "Velocity_Calib": "Setup2",
+    #"Setup3": "Setup2",
+    "TrialCheck": "Setup",
+    "StillCalib": "Setup",
+    "ROM_1_Calib": "Setup",
+    "ROM_2_Calib": "Setup",
+    "Midair_Calib": "Setup",
+    "Velocity_Calib": "Setup",
     # others: no back
 }
 
 
 PAGE_CLASS = {
-    "Setup1": Setup1Page,
-    "Setup2": Setup2Page,
+    "Setup": SetupPage,
+    #"Setup2": Setup2Page,
     "TrialCheck": TrialCheckPage,
     "RunTrials": RunTrialsPage,
     "StillCalib": StillCalibPage,
@@ -88,7 +83,7 @@ PAGE_CLASS = {
 
 # ---------- Controller ----------
 class ExperimenterWindow(QtWidgets.QMainWindow):
-    def __init__(self, start_page="Setup1"):
+    def __init__(self, start_page="Setup"):
         super().__init__()
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
@@ -108,13 +103,13 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             self.pages[name] = page
             self.stack.addWidget(page)
 
-        setup1 = self.pages.get("Setup1")
-        if isinstance(setup1, Setup1Page):
-            setup1.participantIdCommitted.connect(self.set_participant_id)
+        setup = self.pages.get("Setup")
+        if isinstance(setup, SetupPage):
+            setup.participantIdCommitted.connect(self.set_participant_id)
 
         still = self.pages.get("StillCalib")
-        if isinstance(still, StillCalibPage) and hasattr(setup1, "on_calibration_done"):
-            still.calibrationDone.connect(setup1.on_calibration_done)
+        if isinstance(still, StillCalibPage) and hasattr(setup, "on_calibration_done"):
+            still.calibrationDone.connect(setup.on_calibration_done)
 
         # Build state machine
         self.machine = QStateMachine(self)

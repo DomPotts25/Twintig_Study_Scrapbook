@@ -8,7 +8,7 @@ QStateMachine = QtStateMachine.QStateMachine
 
 
 # ------------------ Example page subclasses ------------------
-class Setup1Page(ExperimenterPage):
+class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
 
     def __init__(self, name, log_bus):
@@ -44,7 +44,7 @@ class Setup1Page(ExperimenterPage):
         self.cal_status_labels = {}
 
         # Helper to add a row
-        def add_cal_row(row: int, label_text: str, page_name: str):
+        def add_cal_row(row: int, label_text: str, page_name: str, _cal_grid):
             btn = QtWidgets.QPushButton(f"Open {label_text}")
             # Keep buttons compact, left-aligned
             btn.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -58,13 +58,13 @@ class Setup1Page(ExperimenterPage):
 
             self.cal_status_labels[page_name] = dot
 
-            cal_grid.addWidget(btn, row, 0, 1, 1, alignment=QtCore.Qt.AlignLeft)
-            cal_grid.addWidget(dot, row, 1, 1, 1, alignment=QtCore.Qt.AlignLeft)
+            _cal_grid.addWidget(btn, row, 0, 1, 1, alignment=QtCore.Qt.AlignLeft)
+            _cal_grid.addWidget(dot, row, 1, 1, 1, alignment=QtCore.Qt.AlignLeft)
 
-        add_cal_row(0, "StillCalib", "StillCalib")
-        add_cal_row(1, "ROM_1_Calib", "ROM_1_Calib")
-        add_cal_row(2, "ROM_2_Calib", "ROM_2_Calib")
-        add_cal_row(3, "Midair_Calib", "Midair_Calib")
+        add_cal_row(0, "StillCalib", "StillCalib", cal_grid)
+        add_cal_row(1, "ROM_1_Calib", "ROM_1_Calib", cal_grid)
+        add_cal_row(2, "ROM_2_Calib", "ROM_2_Calib", cal_grid)
+        add_cal_row(3, "Midair_Calib", "Midair_Calib", cal_grid)
 
         # --- Gesture Info Group ---
         gesture_group = QtWidgets.QGroupBox("Gesture Assignments")
@@ -102,6 +102,29 @@ class Setup1Page(ExperimenterPage):
             self.gesture_combos.append(cb)
             gesture_row.addWidget(cb)
 
+        vel_cal_group = QtWidgets.QGroupBox("Velocity Calibration")
+        vel_cal_grid = QtWidgets.QGridLayout(vel_cal_group)
+        vel_cal_grid.setColumnStretch(0, 0)  # buttons column
+        vel_cal_grid.setColumnStretch(1, 1)  # status column can grow a bit but stays small
+        add_cal_row(0, "Velocity_Calib", "Velocity_Calib", vel_cal_grid)
+
+        # --- Samples --- 
+        sample_group = QtWidgets.QGroupBox("Sample Setup")
+        sample_group_row = QtWidgets.QHBoxLayout(sample_group)
+        sample_combos = [(s.name, s) for s in SampleGroup]
+
+        sample_cb = QtWidgets.QComboBox()
+        sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
+        sample_cb.setMinimumWidth(140)
+        sample_cb.addItem("— Select —", userData=None)
+
+        for label, enum_member in sample_combos:
+                sample_cb.addItem(label, userData=enum_member)
+        
+        sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
+        sample_group_row.addWidget(sample_cb)
+        sample_group_row.addWidget(sample_check)
+
         # --- Overall layout ---
         wrap = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(wrap)
@@ -111,6 +134,10 @@ class Setup1Page(ExperimenterPage):
         v.addWidget(cal_group)
         v.addSpacing(10)
         v.addWidget(gesture_group)
+        v.addSpacing(10)
+        v.addWidget(vel_cal_group)
+        v.addSpacing(10)
+        v.addWidget(sample_group)
         v.addStretch()
         self.add_content_widget(wrap)
 
@@ -196,40 +223,40 @@ class Setup1Page(ExperimenterPage):
         self.set_cal_status(page_name, True)
 
 
-class Setup2Page(ExperimenterPage):
-    def __init__(self, name, log_bus):
-        super().__init__(name, log_bus)
-        self.set_status("Stage 2 setup — configure environment & sensors.")
+# class Setup2Page(ExperimenterPage):
+#     def __init__(self, name, log_bus):
+#         super().__init__(name, log_bus)
+#         self.set_status("Stage 2 setup — configure environment & sensors.")
 
-        # Example setup controls unique to Setup2
-        grid = QtWidgets.QGridLayout()
-        grid.addWidget(QtWidgets.QLabel("Environment preset:"), 0, 0)
-        cmb = QtWidgets.QComboBox()
-        cmb.addItems(["Lab A", "Lab B", "Field"])
-        grid.addWidget(cmb, 0, 1)
+#         # Example setup controls unique to Setup2
+#         grid = QtWidgets.QGridLayout()
+#         grid.addWidget(QtWidgets.QLabel("Environment preset:"), 0, 0)
+#         cmb = QtWidgets.QComboBox()
+#         cmb.addItems(["Lab A", "Lab B", "Field"])
+#         grid.addWidget(cmb, 0, 1)
 
-        grid.addWidget(QtWidgets.QLabel("Noise filter:"), 1, 0)
-        spin = QtWidgets.QSpinBox()
-        spin.setRange(0, 100)
-        spin.setValue(30)
-        grid.addWidget(spin, 1, 1)
+#         grid.addWidget(QtWidgets.QLabel("Noise filter:"), 1, 0)
+#         spin = QtWidgets.QSpinBox()
+#         spin.setRange(0, 100)
+#         spin.setValue(30)
+#         grid.addWidget(spin, 1, 1)
 
-        btn_apply = QtWidgets.QPushButton("Apply Settings")
-        grid.addWidget(btn_apply, 2, 0, 1, 2)
+#         btn_apply = QtWidgets.QPushButton("Apply Settings")
+#         grid.addWidget(btn_apply, 2, 0, 1, 2)
 
-        # --- Page-specific button (NOT main nav) ---
-        # Velocity calibration is reachable from Setup2 but should show Back in its own page.
-        btn_vel = QtWidgets.QPushButton("Open Velocity_Calib")
-        btn_vel.clicked.connect(lambda: self.navRequested.emit("Velocity_Calib"))
+#         # --- Page-specific button (NOT main nav) ---
+#         # Velocity calibration is reachable from Setup2 but should show Back in its own page.
+#         btn_vel = QtWidgets.QPushButton("Open Velocity_Calib")
+#         btn_vel.clicked.connect(lambda: self.navRequested.emit("Velocity_Calib"))
 
-        wrap = QtWidgets.QWidget()
-        v = QtWidgets.QVBoxLayout(wrap)
-        v.addLayout(grid)
-        v.addSpacing(12)
-        v.addWidget(btn_vel)
-        v.addStretch(1)
+#         wrap = QtWidgets.QWidget()
+#         v = QtWidgets.QVBoxLayout(wrap)
+#         v.addLayout(grid)
+#         v.addSpacing(12)
+#         v.addWidget(btn_vel)
+#         v.addStretch(1)
 
-        self.add_content_widget(wrap)
+#         self.add_content_widget(wrap)
 
 
 class TrialCheckPage(ExperimenterPage):

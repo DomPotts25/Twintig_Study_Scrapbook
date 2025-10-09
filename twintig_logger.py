@@ -32,11 +32,14 @@ def _send_timestamp(connection: ximu3.Connection) -> None:
     responses = connection.send_commands(
         [f'{{"timestamp":{time.time_ns() // 1000}}}'], 0, 500
     )
+
     if not responses:
         raise RuntimeError(f"No response to for {connection.get_info()}")
     cmd = ximu3.CommandMessage.parse(responses[0])
     if cmd.error:
         raise RuntimeError(cmd.error)
+
+
 
 
 # ------------------------------ Data Types ------------------------------ #
