@@ -5,6 +5,7 @@ from Pages.setup_page import SetupPage, TrialCheckPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
 from Pages.trial_pages import RunTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage
+from twintig_logger import TwintigLogger
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -85,6 +86,8 @@ PAGE_CLASS = {
 class ExperimenterWindow(QtWidgets.QMainWindow):
     def __init__(self, start_page="Setup"):
         super().__init__()
+
+        self.logger = TwintigLogger()
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
 
@@ -110,6 +113,10 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         still = self.pages.get("StillCalib")
         if isinstance(still, StillCalibPage) and hasattr(setup, "on_calibration_done"):
             still.calibrationDone.connect(setup.on_calibration_done)
+
+        for p in self.pages.values():
+            if isinstance(p, ExperimenterPage):
+                p.set_logger(self.logger)
 
         # Build state machine
         self.machine = QStateMachine(self)
@@ -173,9 +180,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             page.pauseToggled.connect(handle_pause)
 
         # Demo telemetry (remove in production)
-        self._demo_timer = QtCore.QTimer(self)
-        self._demo_timer.timeout.connect(self._demo_tick)
-        self._demo_timer.start(1000)
+        # self._demo_timer = QtCore.QTimer(self)
+        # self._demo_timer.timeout.connect(self._demo_tick)
+        # self._demo_timer.start(1000)
 
     @QtCore.Slot(str)
     def set_participant_id(self, pid_text: str):
@@ -189,11 +196,11 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         if (src, tgt) in self._edge_emitters:
             self._edge_emitters[(src, tgt)].fired.emit()
 
-    def _demo_tick(self):
-        import random
+    # def _demo_tick(self):
+    #     import random
 
-        # Simple fake rate: nonzero only if connected
-        connected = any(p._devices_connected for p in self.pages.values())
-        hz = random.uniform(5.0, 30.0) if connected else 0.0
-        for p in self.pages.values():
-            p.set_msg_rate(hz)
+    #     # Simple fake rate: nonzero only if connected
+    #     connected = any(p._devices_connected for p in self.pages.values())
+    #     hz = random.uniform(5.0, 30.0) if connected else 0.0
+    #     for p in self.pages.values():
+    #         p.set_msg_rate(hz)

@@ -15,6 +15,15 @@ class SetupPage(ExperimenterPage):
         super().__init__(name, log_bus)
         self.set_status("Please fit twintig and connect calibration samples.")
 
+        # Track calibration completion flags for the 5 required calibrations
+        self._cal_done: dict[str, bool] = {
+            "StillCalib": False,
+            "ROM_1_Calib": True,
+            "ROM_2_Calib": True,
+            "Midair_Calib": True,
+            "Velocity_Calib": True,
+        }
+
         # --- Participant Info Group ---
         input_group = QtWidgets.QGroupBox("Participant Information")
         input_form = QtWidgets.QFormLayout(input_group)
@@ -46,11 +55,9 @@ class SetupPage(ExperimenterPage):
         # Helper to add a row
         def add_cal_row(row: int, label_text: str, page_name: str, _cal_grid):
             btn = QtWidgets.QPushButton(f"Open {label_text}")
-            # Keep buttons compact, left-aligned
             btn.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
             btn.clicked.connect(lambda: self.navRequested.emit(page_name))
 
-            # Status dot label
             dot = QtWidgets.QLabel("●")
             dot.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             dot.setStyleSheet("QLabel { color: #d32f2f; font-size: 16px; }")  # red
@@ -113,17 +120,16 @@ class SetupPage(ExperimenterPage):
         sample_group_row = QtWidgets.QHBoxLayout(sample_group)
         sample_combos = [(s.name, s) for s in SampleGroup]
 
-        sample_cb = QtWidgets.QComboBox()
-        sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
-        sample_cb.setMinimumWidth(140)
-        sample_cb.addItem("— Select —", userData=None)
-
+        self.sample_cb = QtWidgets.QComboBox()
+        self.sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
+        self.sample_cb.setMinimumWidth(140)
+        self.sample_cb.addItem("— Select —", userData=None)
         for label, enum_member in sample_combos:
-                sample_cb.addItem(label, userData=enum_member)
-        
-        sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
-        sample_group_row.addWidget(sample_cb)
-        sample_group_row.addWidget(sample_check)
+            self.sample_cb.addItem(label, userData=enum_member)
+
+        self.sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
+        sample_group_row.addWidget(self.sample_cb)
+        sample_group_row.addWidget(self.sample_check)
 
         # --- Overall layout ---
         wrap = QtWidgets.QWidget()
@@ -140,6 +146,59 @@ class SetupPage(ExperimenterPage):
         v.addWidget(sample_group)
         v.addStretch()
         self.add_content_widget(wrap)
+
+    # ---- NAV OVERRIDE: intercept “Go to …” from Setup ----
+    def build_nav(self, main_targets: list[str], back_target: str | None):
+        super().build_nav(main_targets, back_target)
+        # Intercept all forward navs from Setup; only allow if ready
+        for tgt, btn in self.nav_buttons.items():
+            try:
+                btn.clicked.disconnect()  # remove default “emit navRequested”
+            except TypeError:
+                pass
+            btn.clicked.connect(lambda _, t=tgt: self._attempt_nav(t))
+    
+    def _attempt_nav(self, target: str):
+        ok, issues = self._is_ready_to_proceed()
+        if ok:
+            self.navRequested.emit(target)
+        else:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Setup incomplete",
+                "You can’t proceed yet:\n\n• " + "\n• ".join(issues),
+                QtWidgets.QMessageBox.Ok,
+            )
+
+        # ---- Readiness checks ----
+    def _is_ready_to_proceed(self) -> tuple[bool, list[str]]:
+        issues: list[str] = []
+
+        # 1) Devices connected
+        if not self._devices_connected:
+            issues.append("Devices are not connected.")
+
+        # 2) Participant ID is an integer (we store it globally on every page)
+        pid = self.participant_id()
+        if pid is None or not pid.isdigit():
+            issues.append("Participant ID is not set to an integer.")
+
+        # 3) All calibration pages completed
+        missing_cals = [name for name, done in self._cal_done.items() if not done]
+        if missing_cals:
+            issues.append("Calibrations incomplete: " + ", ".join(missing_cals))
+
+        # 4) All gesture comboboxes must have a selection
+        if any(cb.currentData() is None for cb in self.gesture_combos):
+            issues.append("All gesture assignments must be selected.")
+
+        # 5) Sample set & sample inserted ticked
+        if self.sample_cb.currentData() is None:
+            issues.append("Sample Setup combo must be selected.")
+        if not self.sample_check.isChecked():
+            issues.append("“Sample inserted” must be ticked.")
+
+        return (len(issues) == 0, issues)
 
     def _current_gesture_selections(self) -> set:
         """Return the set of enum members currently selected across all combos (excluding blanks)."""
@@ -216,6 +275,10 @@ class SetupPage(ExperimenterPage):
         else:
             label.setStyleSheet("QLabel { color: #d32f2f; font-size: 16px; }")  # red
             label.setToolTip(f"{page_name} not completed")
+            
+        # Track the boolean for readiness check
+        if page_name in self._cal_done:
+            self._cal_done[page_name] = bool(ok)
 
     # ---- Example slot you can connect to your app’s signal ----
     @QtCore.Slot(str)

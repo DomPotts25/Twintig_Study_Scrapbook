@@ -1,7 +1,13 @@
+from collections import deque
+from typing import Deque
+
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
+
+from twintig_logger import FSRPacket, TwintigLogger
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
+
 
 class LogBus(QtCore.QObject):
     message = QtCore.Signal(str)
@@ -34,12 +40,24 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.nav_buttons = {}
         self.back_button = None
 
+        self._logger: TwintigLogger | None = None
+        self._devices_connected: bool = False
+        self._recording: bool = False
+        self._msg_rate_hz: float = 0.0
+
+        self._poll_timer = QtCore.QTimer(self)
+        self._poll_timer.setInterval(250)  # 4 Hz UI refresh is plenty
+        self._poll_timer.timeout.connect(self._poll_logger_state)
+
+        # rolling window for Hz (last 2 seconds)
+        self._ts_window_us: Deque[int] = deque(maxlen=512)
+
         # Internal status
         self._devices_connected = False
         self._paused = False
         self._recording = False
         self._msg_rate_hz = 0.0
-        self._participant_id: str | None = None  # <<< NEW: central store on every page
+        self._participant_id: str | None = None
 
         # Dark theme
         self.setStyleSheet("""
@@ -180,6 +198,95 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.log.appendPlainText(text)
         self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
 
+        # ------------ new: DI for the shared logger ------------
+
+    def set_logger(self, logger: TwintigLogger):
+        self._logger = logger
+        # If already open (another page connected), reflect that in our LEDs/labels
+        self._devices_connected = logger.is_open
+        self._recording = logger.is_logging
+        self._msg_rate_hz = logger.get_msg_rate_hz(2.0)
+        self._refresh_indicators()
+
+    # ------------ internal: FSR → message-rate ------------
+    def _fsr_rx(self, pkt: FSRPacket):
+        # compute Hz over a short rolling time window
+        self._ts_window_us.append(pkt.timestamp_us)
+        if len(self._ts_window_us) >= 2:
+            dt_us = self._ts_window_us[-1] - self._ts_window_us[0]
+            if dt_us > 0:
+                hz = (len(self._ts_window_us) - 1) / (dt_us / 1_000_000.0)
+                self.set_msg_rate(hz)
+
+    # ------------ device lifecycle handlers ------------
+    @QtCore.Slot()
+    def _on_connect_clicked(self):
+        if not self._logger:
+            QtWidgets.QMessageBox.critical(self, "Error", "Logger not initialised.")
+            return
+        try:
+            self._logger.open()
+            self.append_log("Devices connected.")
+        except Exception as e:
+            self.append_log(f"Device open failed: {e}")
+            QtWidgets.QMessageBox.critical(self, "Connection failed", str(e))
+
+    @QtCore.Slot()
+    def _on_disconnect_clicked(self):
+        if not self._logger:
+            return
+        try:
+            self._logger.close()
+            self.append_log("Devices disconnected.")
+        except Exception as e:
+            self.append_log(f"Close error: {e}")
+
+    @QtCore.Slot()
+    def _on_start_rec_clicked(self):
+        if not self._logger:
+            return
+        if not self._logger.is_open:
+            # auto-open if user presses record first
+            try:
+                self._logger.open()
+            except Exception as e:
+                self.log_bus.log(f"Open before record failed: {e}")
+                QtWidgets.QMessageBox.critical(self, "Record failed", str(e))
+                return
+            self._logger.add_fsr_callback(self._fsr_rx)
+            self._devices_connected = True
+
+        # Optional: make per-participant folder names
+        log_name = "Logged Data"
+        pid = getattr(self, "participant_id", lambda: None)()
+        if pid:
+            log_name = f"PID_{pid}"
+
+        try:
+            # You can also pass delete_existing / make_unique_on_conflict here
+            self._logger.log_name = log_name
+            self._logger.start_logging()
+        except Exception as e:
+            self.log_bus.log(f"Start logging failed: {e}")
+            QtWidgets.QMessageBox.critical(self, "Record failed", str(e))
+            return
+
+        self._recording = True
+        self.log_bus.log(f"Recording started → {self._logger.log_name}")
+        self._refresh_indicators()
+
+    @QtCore.Slot()
+    def _on_stop_rec_clicked(self):
+        if not self._logger:
+            return
+        try:
+            self._logger.stop_logging()
+        except Exception as e:
+            self.log_bus.log(f"Stop logging error: {e}")
+        self._recording = False
+        self.log_bus.log("Recording stopped.")
+        self._refresh_indicators()
+
     # ---------- Public status helpers ----------
     def set_status(self, text: str):
         self.status_label.setText(text)
@@ -231,13 +338,13 @@ class ExperimenterPage(QtWidgets.QWidget):
             self.nav_buttons[t] = b
 
     # ---------- Internals ----------
-    def _on_connect_clicked(self):
-        self.append_log("[ui] Connect requested.")
-        self.connectRequested.emit()
+    # def _on_connect_clicked(self):
+    #     self.append_log("[ui] Connect requested.")
+    #     self.connectRequested.emit()
 
-    def _on_disconnect_clicked(self):
-        self.append_log("[ui] Disconnect requested.")
-        self.disconnectRequested.emit()
+    # def _on_disconnect_clicked(self):
+    #     self.append_log("[ui] Disconnect requested.")
+    #     self.disconnectRequested.emit()
 
     def _on_pause_resume_clicked(self):
         self._paused = not self._paused
@@ -263,3 +370,21 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._lbl_msg.setText(f"Msg rate: {self._msg_rate_hz:.1f} Hz")
         set_led(self._led_rec, self._recording, on_color="#fa0")
         self._lbl_rec.setText(f"Recording: {'On' if self._recording else 'Off'}")
+
+    def showEvent(self, e: QtGui.QShowEvent):
+        super().showEvent(e)
+        if self._logger:
+            self._poll_timer.start()
+            self._poll_logger_state()
+
+    def hideEvent(self, e: QtGui.QHideEvent):
+        self._poll_timer.stop()
+        super().hideEvent(e)
+
+    def _poll_logger_state(self):
+        if not self._logger:
+            return
+        self._devices_connected = self._logger.is_open
+        self._recording = self._logger.is_logging
+        self._msg_rate_hz = self._logger.get_msg_rate_hz(2.0)  # total across counted streams
+        self._refresh_indicators()

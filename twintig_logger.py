@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Iterable
 
 import os
 import shutil
@@ -11,8 +12,6 @@ from typing import Callable, Deque, List, Optional, Tuple
 import ximu3
 
 # --------------------------- Low-level helpers --------------------------- #
-
-
 def _connect(device_name: str) -> ximu3.Connection:
     devices = ximu3.PortScanner.scan()
     time.sleep(0.1)  # wait for ports to close
@@ -86,6 +85,8 @@ class TwintigLogger:
         self._latest_fsr: Optional[FSRPacket] = None
         self._latest_lock = threading.Lock()
 
+        self._traffic_ts: Deque[int] = deque(maxlen=4096)
+
         self._paused = False
         self._open = False
 
@@ -110,6 +111,12 @@ class TwintigLogger:
             result = c.open()
             if result != ximu3.RESULT_OK:
                 raise RuntimeError("Unable to open IMU mux connection")
+
+            try:
+                c.add_inertial_callback(self._imu_inertial_callback)
+            except AttributeError:
+                # Some SDK builds may use different names; ignore if missing
+                pass
 
         # Pre-sync timestamps
         _send_timestamp(self._tap_conn)
@@ -169,6 +176,25 @@ class TwintigLogger:
                 raise RuntimeError(
                     f"Data logger failed. {ximu3.result_to_string(result)}"
                 )
+            
+    def get_msg_rate_hz(self, horizon_s: float = 2.0) -> float:
+        """Return aggregate incoming message rate (Hz) over the last ~horizon_s seconds."""
+        with self._latest_lock:
+            if len(self._traffic_ts) < 2:
+                return 0.0
+            newest = self._traffic_ts[-1]
+            cutoff = newest - int(horizon_s * 1_000_000)
+            # Walk backwards until cutoff
+            first = newest
+            count = 1
+            for t in reversed(self._traffic_ts):
+                if t < cutoff:
+                    break
+                first = t
+                count += 1
+            dt = newest - first
+            return (count - 1) / (dt / 1_000_000.0) if dt > 0 else 0.0
+
 
     def pause_logging(self) -> None:
         # Software pause; DataLogger continues, but we skip user callbacks
@@ -200,6 +226,11 @@ class TwintigLogger:
             except Exception:
                 pass
         self._imu_conns.clear()
+        with self._latest_lock:
+            self._latest_fsr = None
+            self._traffic_ts.clear()
+        self._open = False
+
         self._open = False
 
     # ----------------------------- Callbacks ----------------------------- #
@@ -226,12 +257,38 @@ class TwintigLogger:
         pkt = FSRPacket(timestamp_us=message.timestamp, values=values)
         with self._latest_lock:
             self._latest_fsr = pkt
+            self._traffic_ts.append(pkt.timestamp_us) 
         for cb in self._fsr_callbacks:
             try:
                 cb(pkt)
             except Exception:
                 # Never crash the callback chain
                 pass
+
+    def _imu_inertial_callback(self, message: "ximu3.InertialMessage"):
+        if self._paused:
+            return
+        # We only need the timestamp to count traffic
+        try:
+            ts = int(message.timestamp)
+        except Exception:
+            return
+        with self._latest_lock:
+            self._traffic_ts.append(ts)
+
+    @property
+    def is_open(self) -> bool:
+        return self._open
+
+    @property
+    def is_logging(self) -> bool:
+        return self._data_logger is not None
+
+    def remove_fsr_callback(self, cb: Callable[[FSRPacket], None]) -> None:
+        try:
+            self._fsr_callbacks.remove(cb)
+        except ValueError:
+            pass
 
 
 # Convenience factory for quick scripts

@@ -11,7 +11,6 @@ class GenericPage(ExperimenterPage):
         lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.add_content_widget(lbl)
 
-
 class StillCalibPage(ExperimenterPage):
     calibrationDone = QtCore.Signal(str)  # emits the page key
 
@@ -44,4 +43,4 @@ class StillCalibPage(ExperimenterPage):
     def _finish_calibration(self):
         self.log_bus.log("Still calibration complete.")
         self.run_btn.setEnabled(True)
-        self.calibrationDone.emit("StillCalib")  # key matches Setup1’s map
+        self.calibrationDone.emit("StillCalib")  # key matches Setup’s map
