@@ -47,7 +47,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._logger: TwintigLogger | None = None
         self._devices_connected: bool = False
         self._recording: bool = False
-        self._msg_rate_hz: float = 0.0
+        self._carpus_msg_rate_hz: float = 0.0
+        self._pads_msg_rate_hz: float = 0.0
 
         self._poll_timer = QtCore.QTimer(self)
         self._poll_timer.setInterval(250)  # 4 Hz UI refresh is plenty
@@ -60,7 +61,6 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._devices_connected = False
         self._paused = False
         self._recording = False
-        self._msg_rate_hz = 0.0
         self._participant_id: str | None = None
         self._study_phase = None
         self._sample_group = None
@@ -165,12 +165,16 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._led_devices_wrap, self._led_devices, self._lbl_devices = make_led(
             "Devices: Disconnected"
         )
-        self._led_msg_wrap, self._led_msg, self._lbl_msg = make_led("Msg rate: 0.0 Hz")
+        self._led_carpus_msg_wrap, self._led_carpus_msg, self._lbl_carpus_msg = make_led("Carpus Msg rate: 0.0 Hz")
+        self._led_pads_msg_wrap, self._led_pads_msg, self._lbl_pads_msg = make_led("Tap Pads Msg rate: 0.0 Hz")       
+
         self._led_rec_wrap, self._led_rec, self._lbl_rec = make_led("Recording: Off")
 
         ind_row.addWidget(self._led_devices_wrap)
         ind_row.addSpacing(12)
-        ind_row.addWidget(self._led_msg_wrap)
+        ind_row.addWidget(self._led_carpus_msg_wrap)
+        ind_row.addSpacing(12)
+        ind_row.addWidget(self._led_pads_msg_wrap)
         ind_row.addSpacing(12)
         ind_row.addWidget(self._led_rec_wrap)
         ind_row.addStretch(1)
@@ -289,7 +293,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         # If already open (another page connected), reflect that in our LEDs/labels
         self._devices_connected = logger.is_open
         self._recording = logger.is_logging
-        self._msg_rate_hz = logger.get_msg_rate_hz(2.0)
+        self._carpus_msg_rate_hz = logger._carpus_msg_rate
+        self._pads_msg_rate_hz = logger._tap_pads_msg_rate
         self._refresh_indicators()
 
     # ------------ internal: FSR → message-rate ------------
@@ -383,7 +388,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._refresh_indicators()
 
     def set_msg_rate(self, hz: float):
-        self._msg_rate_hz = max(0.0, float(hz))
+        self._carpus_msg_rate_hz = max(0.0, float(hz))
+        self._pads_msg_rate_hz = max(0.0, float(hz))
         self._refresh_indicators()
 
     def set_recording(self, recording: bool):
@@ -430,19 +436,20 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.pauseToggled.emit(self._paused)
 
     def _refresh_indicators(self):
-        def set_led(
-            led_label: QtWidgets.QLabel, on: bool, on_color="#0f7", off_color="#444"
-        ):
+        def set_led(led_label: QtWidgets.QLabel, on: bool, on_color="#0f7", off_color="#444"):
             led_label.setStyleSheet(
                 f"color: {on_color if on else off_color}; font-size: 18px;"
             )
-
+        
         set_led(self._led_devices, self._devices_connected)
         self._lbl_devices.setText(
             f"Devices: {'Connected' if self._devices_connected else 'Disconnected'}"
         )
-        set_led(self._led_msg, self._msg_rate_hz > 0.1)
-        self._lbl_msg.setText(f"Msg rate: {self._msg_rate_hz:.1f} Hz")
+        set_led(self._led_carpus_msg, self._carpus_msg_rate_hz > 0.1)
+        self._lbl_carpus_msg.setText(f"Carpus Msg rate: {self._carpus_msg_rate_hz:.1f} Hz")
+        set_led(self._led_pads_msg, self._pads_msg_rate_hz > 0.1)
+        self._lbl_pads_msg.setText(f"Tap Pads Msg rate: {self._pads_msg_rate_hz:.1f} Hz")
+
         set_led(self._led_rec, self._recording, on_color="#fa0")
         self._lbl_rec.setText(f"Recording: {'On' if self._recording else 'Off'}")
 
@@ -461,9 +468,9 @@ class ExperimenterPage(QtWidgets.QWidget):
             return
         self._devices_connected = self._logger.is_open
         self._recording = self._logger.is_logging
-        self._msg_rate_hz = self._logger.get_msg_rate_hz(
-            2.0
-        )  # total across counted streams
+        self._carpus_msg_rate_hz = self._logger._carpus_msg_rate
+        self._pads_msg_rate_hz = self._logger._tap_pads_msg_rate
+
         self._refresh_indicators()
 
 
