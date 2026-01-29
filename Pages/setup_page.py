@@ -10,6 +10,8 @@ QStateMachine = QtStateMachine.QStateMachine
 # ------------------ Example page subclasses ------------------
 class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
+    gestureOrderCommitted = QtCore.Signal(object)  # list[Gestures]
+    sampleOrderCommitted = QtCore.Signal(object)   # list[SampleGroup]
 
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
@@ -109,27 +111,53 @@ class SetupPage(ExperimenterPage):
             self.gesture_combos.append(cb)
             gesture_row.addWidget(cb)
 
+
+        # --- Samples --- 
+        sample_group = QtWidgets.QGroupBox("Sample Setup")
+        sample_group_row = QtWidgets.QHBoxLayout(sample_group)
+
+        sample_group_row.setContentsMargins(9, 9, 9, 9)
+        sample_group_row.setSpacing(8)
+
+        # same functionality as gestures but for samples
+        self.sample_combos: list[QtWidgets.QComboBox] = []
+
+        try:
+            self._sample_options = [(s.name, s) for s in SampleGroup]
+        except Exception:
+            self._sample_options = [(s.name, s) for s in SampleGroup]
+
+        for _ in self._sample_options:
+            cb = QtWidgets.QComboBox()
+            cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
+            cb.setMinimumWidth(140)
+            cb.addItem("— Select —", userData=None)
+
+            for label, enum_member in self._sample_options:
+                cb.addItem(label, userData=enum_member)
+            
+            cb.currentIndexChanged.connect(self._on_sample_changed)
+            self.sample_combos.append(cb)
+            sample_group_row.addWidget(cb)
+        
+        # sample_combos = [(s.name, s) for s in SampleGroup]
+
+        # self.sample_cb = QtWidgets.QComboBox()
+        # self.sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
+        # self.sample_cb.setMinimumWidth(140)
+        # self.sample_cb.addItem("— Select —", userData=None)
+        # for label, enum_member in sample_combos:
+        #     self.sample_cb.addItem(label, userData=enum_member)
+
+        #self.sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
+        # sample_group_row.addWidget(self.sample_cb)
+        #sample_group_row.addWidget(self.sample_check)
+
         vel_cal_group = QtWidgets.QGroupBox("Velocity Calibration")
         vel_cal_grid = QtWidgets.QGridLayout(vel_cal_group)
         vel_cal_grid.setColumnStretch(0, 0)  # buttons column
         vel_cal_grid.setColumnStretch(1, 1)  # status column can grow a bit but stays small
         add_cal_row(0, "Velocity_Calib", "Velocity_Calib", vel_cal_grid)
-
-        # --- Samples --- 
-        sample_group = QtWidgets.QGroupBox("Sample Setup")
-        sample_group_row = QtWidgets.QHBoxLayout(sample_group)
-        sample_combos = [(s.name, s) for s in SampleGroup]
-
-        self.sample_cb = QtWidgets.QComboBox()
-        self.sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
-        self.sample_cb.setMinimumWidth(140)
-        self.sample_cb.addItem("— Select —", userData=None)
-        for label, enum_member in sample_combos:
-            self.sample_cb.addItem(label, userData=enum_member)
-
-        self.sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
-        sample_group_row.addWidget(self.sample_cb)
-        sample_group_row.addWidget(self.sample_check)
 
         # --- Overall layout ---
         wrap = QtWidgets.QWidget()
@@ -141,9 +169,9 @@ class SetupPage(ExperimenterPage):
         v.addSpacing(10)
         v.addWidget(gesture_group)
         v.addSpacing(10)
-        v.addWidget(vel_cal_group)
-        v.addSpacing(10)
         v.addWidget(sample_group)
+        v.addSpacing(10)
+        v.addWidget(vel_cal_group)
         v.addStretch()
         self.add_content_widget(wrap)
 
@@ -161,6 +189,20 @@ class SetupPage(ExperimenterPage):
     def _attempt_nav(self, target: str):
         ok, issues = self._is_ready_to_proceed()
         if ok:
+            # Only push assignments when leaving Setup towards TrialCheck
+            if target == "TrialCheck":
+                # Gestures: list[Gestures]
+                gesture_order = [cb.currentData() for cb in self.gesture_combos]
+                gesture_order = [g for g in gesture_order if g is not None]
+
+                # Samples: list[SampleGroup]
+                sample_order = [cb.currentData() for cb in self.sample_combos]
+                sample_order = [s for s in sample_order if s is not None]
+
+                self.gestureOrderCommitted.emit(gesture_order)
+                self.sampleOrderCommitted.emit(sample_order)
+
+            # Proceed with normal navigation
             self.navRequested.emit(target)
         else:
             QtWidgets.QMessageBox.warning(
@@ -179,7 +221,7 @@ class SetupPage(ExperimenterPage):
             issues.append("Devices are not connected.")
 
         # 2) Participant ID is an integer (we store it globally on every page)
-        pid = self.participant_id()
+        pid = self._participant_id
         if pid is None or not pid.isdigit():
             issues.append("Participant ID is not set to an integer.")
 
@@ -188,15 +230,18 @@ class SetupPage(ExperimenterPage):
         if missing_cals:
             issues.append("Calibrations incomplete: " + ", ".join(missing_cals))
 
-        # 4) All gesture comboboxes must have a selection
+        # 4) All gesture & sample comboboxes must have a selection
         if any(cb.currentData() is None for cb in self.gesture_combos):
             issues.append("All gesture assignments must be selected.")
 
+        if any(cb.currentData() is None for cb in self.sample_combos):
+            issues.append("All sample assignments must be selected.")
+
         # 5) Sample set & sample inserted ticked
-        if self.sample_cb.currentData() is None:
-            issues.append("Sample Setup combo must be selected.")
-        if not self.sample_check.isChecked():
-            issues.append("“Sample inserted” must be ticked.")
+        # if self.sample_cb.currentData() is None:
+        #     issues.append("Sample Setup combo must be selected.")
+        # if not self.sample_check.isChecked():
+        #     issues.append("“Sample inserted” must be ticked.")
 
         return (len(issues) == 0, issues)
 
@@ -246,6 +291,52 @@ class SetupPage(ExperimenterPage):
             finally:
                 cb.blockSignals(False)
 
+    def _current_sample_selections(self) -> set:
+        """Return the set of enum members currently selected across all combos (excluding blanks)."""
+        selected = set()
+        for cb in self.sample_combos:
+            data = cb.currentData()
+            if data is not None:
+                selected.add(data)
+        return selected
+    
+    @QtCore.Slot()
+    def _on_sample_changed(self):
+        """Rebuild each combo's items so already-chosen samples are unavailable in others."""
+        selected = self._current_sample_selections()
+
+        # Rebuild each combo while preserving its current choice and blocking signals
+        for cb in self.sample_combos:
+            keep = cb.currentData()  # enum member or None
+
+            cb.blockSignals(True)
+            try:
+                # Capture current text to restore index after rebuild
+                current_enum = keep
+
+                # Wipe and re-add placeholder
+                cb.clear()
+                cb.addItem("— Select —", userData=None)
+
+                # Refill with allowed options:
+                # show everything that's NOT chosen by others,
+                # plus the one this combo already has (so it doesn't vanish)
+                for label, enum_member in self._sample_options:
+                    if enum_member == current_enum or enum_member not in selected:
+                        cb.addItem(label, userData=enum_member)
+
+                # Restore current selection
+                if current_enum is None:
+                    cb.setCurrentIndex(0)
+                else:
+                    # Find index whose userData matches current_enum
+                    for i in range(cb.count()):
+                        if cb.itemData(i) == current_enum:
+                            cb.setCurrentIndex(i)
+                            break
+            finally:
+                cb.blockSignals(False)
+
     @QtCore.Slot()
     def _commit_pid(self):
         text = self.pid_input.text().strip()
@@ -275,7 +366,7 @@ class SetupPage(ExperimenterPage):
         else:
             label.setStyleSheet("QLabel { color: #d32f2f; font-size: 16px; }")  # red
             label.setToolTip(f"{page_name} not completed")
-            
+
         # Track the boolean for readiness check
         if page_name in self._cal_done:
             self._cal_done[page_name] = bool(ok)
@@ -284,42 +375,6 @@ class SetupPage(ExperimenterPage):
     @QtCore.Slot(str)
     def on_calibration_done(self, page_name: str):
         self.set_cal_status(page_name, True)
-
-
-# class Setup2Page(ExperimenterPage):
-#     def __init__(self, name, log_bus):
-#         super().__init__(name, log_bus)
-#         self.set_status("Stage 2 setup — configure environment & sensors.")
-
-#         # Example setup controls unique to Setup2
-#         grid = QtWidgets.QGridLayout()
-#         grid.addWidget(QtWidgets.QLabel("Environment preset:"), 0, 0)
-#         cmb = QtWidgets.QComboBox()
-#         cmb.addItems(["Lab A", "Lab B", "Field"])
-#         grid.addWidget(cmb, 0, 1)
-
-#         grid.addWidget(QtWidgets.QLabel("Noise filter:"), 1, 0)
-#         spin = QtWidgets.QSpinBox()
-#         spin.setRange(0, 100)
-#         spin.setValue(30)
-#         grid.addWidget(spin, 1, 1)
-
-#         btn_apply = QtWidgets.QPushButton("Apply Settings")
-#         grid.addWidget(btn_apply, 2, 0, 1, 2)
-
-#         # --- Page-specific button (NOT main nav) ---
-#         # Velocity calibration is reachable from Setup2 but should show Back in its own page.
-#         btn_vel = QtWidgets.QPushButton("Open Velocity_Calib")
-#         btn_vel.clicked.connect(lambda: self.navRequested.emit("Velocity_Calib"))
-
-#         wrap = QtWidgets.QWidget()
-#         v = QtWidgets.QVBoxLayout(wrap)
-#         v.addLayout(grid)
-#         v.addSpacing(12)
-#         v.addWidget(btn_vel)
-#         v.addStretch(1)
-
-#         self.add_content_widget(wrap)
 
 
 class TrialCheckPage(ExperimenterPage):

@@ -5,6 +5,9 @@ from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from twintig_logger import FSRPacket, TwintigLogger
 
+import time
+
+
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
@@ -32,6 +35,7 @@ class ExperimenterPage(QtWidgets.QWidget):
     # Navigation signals (wired by controller)
     backRequested = QtCore.Signal()  # fixed back (MAIN_BACK)
     navRequested = QtCore.Signal(str)  # go to target page
+    studyPhaseRequested = QtCore.Signal(object)  # will carry a StudyPhases value
 
     def __init__(self, name: str, log_bus: LogBus):
         super().__init__()
@@ -58,6 +62,12 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._recording = False
         self._msg_rate_hz = 0.0
         self._participant_id: str | None = None
+        self._study_phase = None
+        self._sample_group = None
+        self._sample_id: int | None = None
+        self._sample_name: str | None = None
+        self._gesture = None
+        self._trial_id: int | None = None
 
         # Dark theme
         self.setStyleSheet("""
@@ -78,26 +88,54 @@ class ExperimenterPage(QtWidgets.QWidget):
         title = QtWidgets.QLabel(name)
         title.setAlignment(QtCore.Qt.AlignCenter)
         title.setStyleSheet("font-size: 26px; font-weight: 600;")
-        root.addWidget(title)
+        # root.addWidget(title)
 
-        # NEW: a small chip to show current participant
-        self._lbl_participant = QtWidgets.QLabel("Participant: —")
-        self._lbl_participant.setAlignment(
-            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
-        )
-        self._lbl_participant.setStyleSheet("""
+        # small pill-style labels ("chips")
+        chip_css = """
             QLabel {
                 color: #ddd; background: #111; border: 1px solid #444;
                 border-radius: 10px; padding: 4px 8px; font-size: 12px;
             }
-        """)
+        """
+
+        self._lbl_participant = QtWidgets.QLabel("Participant: —")
+
+        self._lbl_phase = QtWidgets.QLabel("Phase: —")
+        self._lbl_sample_group = QtWidgets.QLabel("Sample_Group: —")
+        self._lbl_sample_id = QtWidgets.QLabel("Sample_ID: —")
+        self._lbl_sample_name = QtWidgets.QLabel("Sample_Name: —")
+        self._lbl_gesture = QtWidgets.QLabel("Gesture: —")
+        self._lbl_trial = QtWidgets.QLabel("Trial: —")
+
+        for lbl in (
+            self._lbl_participant,
+            self._lbl_phase,
+            self._lbl_sample_group,
+            self._lbl_sample_id,
+            self._lbl_sample_name,
+            self._lbl_gesture,
+            self._lbl_trial,
+        ):
+            lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            lbl.setStyleSheet(chip_css)
 
         # Put title + chip on one row
         title_row = QtWidgets.QHBoxLayout()
         title_row.addStretch(1)
         title_row.addWidget(title, 0, QtCore.Qt.AlignCenter)
         title_row.addStretch(1)
-        title_row.addWidget(self._lbl_participant, 0, QtCore.Qt.AlignRight)
+
+        chips_row = QtWidgets.QHBoxLayout()
+        chips_row.setSpacing(6)
+        chips_row.addWidget(self._lbl_phase)
+        chips_row.addWidget(self._lbl_gesture)
+        chips_row.addWidget(self._lbl_sample_group)
+        chips_row.addWidget(self._lbl_sample_id)
+        chips_row.addWidget(self._lbl_sample_name)
+        chips_row.addWidget(self._lbl_trial)
+        chips_row.addWidget(self._lbl_participant)
+
+        title_row.addLayout(chips_row)
         root.addLayout(title_row)
 
         # Page hint
@@ -185,9 +223,55 @@ class ExperimenterPage(QtWidgets.QWidget):
             f"Participant: {pid}" if pid not in (None, "") else "Participant: —"
         )
 
-    def participant_id(self) -> str | None:
-        """Optional getter for pages that need to read it."""
-        return self._participant_id
+    # ---------- Experiment context chips API ----------
+    def set_study_phase(self, phase):
+        """phase can be a StudyPhases enum, string, or None."""
+        self._study_phase = phase
+        txt = "—"
+        if phase not in (None, ""):
+            # enums will usually have .name, but we fall back to str()
+            txt = getattr(phase, "name", str(phase))
+        self._lbl_phase.setText(f"Phase: {txt}")
+
+    def set_sample_group(self, group):
+        """group can be a SampleGroup enum, string, or None."""
+        self._sample_group = group
+        txt = "—"
+        if group not in (None, ""):
+            txt = getattr(group, "name", str(group))
+        self._lbl_sample_group.setText(f"Group: {txt}")
+
+    def set_sample_id(self, sample_id):
+        """sample_id is typically an int, -1/None means 'no sample'."""
+        self._sample_id = sample_id
+        if sample_id in (None, -1, ""):
+            txt = "—"
+        else:
+            txt = str(sample_id)
+        self._lbl_sample_id.setText(f"Sample: {txt}")
+
+    def set_sample_name(self, name):
+        """Human-readable name for the sample."""
+        self._sample_name = name
+        txt = "—" if not name else str(name)
+        self._lbl_sample_name.setText(f"Name: {txt}")
+
+    def set_trial_id(self, trial_id):
+        """Current trial index / ID, -1/None means 'no trial'."""
+        self._trial_id = trial_id
+        if trial_id in (None, -1, ""):
+            txt = "—"
+        else:
+            txt = str(trial_id)
+        self._lbl_trial.setText(f"Trial: {txt}")
+
+    def set_gesture(self, gesture):
+        """Current trial index / ID, -1/None means 'no trial'."""
+        self._gesture = gesture
+        txt = "—"
+        if gesture not in (None, ""):
+            txt = getattr(gesture, "name", str(gesture))
+        self._lbl_gesture.setText(f"Group: {txt}")
 
     # All logging should go through the bus so it appears on every page
     def append_log(self, text: str):
@@ -337,15 +421,6 @@ class ExperimenterPage(QtWidgets.QWidget):
             self.nav_bar.addWidget(b)
             self.nav_buttons[t] = b
 
-    # ---------- Internals ----------
-    # def _on_connect_clicked(self):
-    #     self.append_log("[ui] Connect requested.")
-    #     self.connectRequested.emit()
-
-    # def _on_disconnect_clicked(self):
-    #     self.append_log("[ui] Disconnect requested.")
-    #     self.disconnectRequested.emit()
-
     def _on_pause_resume_clicked(self):
         self._paused = not self._paused
         self.btn_pause_resume.setText(
@@ -386,5 +461,10 @@ class ExperimenterPage(QtWidgets.QWidget):
             return
         self._devices_connected = self._logger.is_open
         self._recording = self._logger.is_logging
-        self._msg_rate_hz = self._logger.get_msg_rate_hz(2.0)  # total across counted streams
+        self._msg_rate_hz = self._logger.get_msg_rate_hz(
+            2.0
+        )  # total across counted streams
         self._refresh_indicators()
+
+
+    

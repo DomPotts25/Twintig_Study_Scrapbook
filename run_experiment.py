@@ -8,7 +8,6 @@ import participant_page
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
-
 def main():
     app = QtWidgets.QApplication(sys.argv)
     experimenter_window = experiment_controller.ExperimenterWindow()

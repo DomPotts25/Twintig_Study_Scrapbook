@@ -2,9 +2,8 @@ from enum import Enum
 
 
 class Velocity(str, Enum):
-    SOFT = "soft"
-    MEDIUM = "medium"
-    HARD = "hard"
+    SLOW = "slow"
+    FAST = "fast"
 
 
 class SampleGroup(str, Enum):
@@ -16,6 +15,25 @@ class SampleGroup(str, Enum):
     SIZE = "size"
 
 
+# class ShapeSamples(str, Enum):
+#     FLAT = "flat"
+#     CONVEX = "convex"
+
+# class SizeSamples(str, Enum):
+#     SMALL = "small"
+
+# class StiffnessSoftSamples(str, Enum):
+#     SOFT = "soft"
+
+# class StiffnessHardSamples(str, Enum):
+#     MEDIUM = "medium"
+
+# class TextureSamples(str, Enum):
+#     COARSE = "coarse"
+
+# class HollowSamples(str, Enum):
+#     HOLLOW = "hollow"
+
 class Gestures(str, Enum):
     TAP = "tap"
     PAT = "pat"
@@ -25,16 +43,15 @@ class Gestures(str, Enum):
 
 
 class StudyPhases(str, Enum):
-    STUDY_PHASE = "study_phase"
     SETUP = "setup"
-    STILL_CALIBRATION = "still_calibration"
-    ROM_1 = "rom_1"
-    ROM_2 = "rom_2"
-    MIDAIR_CALIBRATION = "midair_calibration"
-    PRE_TRIAL = "pre_trial"
+        STILL_CALIBRATION = "still_calibration"
+        ROM_1 = "rom_1"
+        ROM_2 = "rom_2"
+        MIDAIR_CALIBRATION = "midair_calibration"
+        PRE_TRIAL = "pre_trial"
     TRIAL = "trial"
-    GESTURE_SWITCH = "gesture_switch"
-    SAMPLE_SWITCH = "sample_switch"
-    BREAK = "break"
-    END_CALIBRATION = "end_calibration"
+        GESTURE_SWITCH = "gesture_switch"
+        SAMPLE_SWITCH = "sample_switch"
+        BREAK = "break"
+        #END_CALIBRATION = "end_calibration"
     END_EXPERIMENT = "end_experiment"

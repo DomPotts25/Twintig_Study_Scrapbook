@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from typing import Callable, Deque, List, Optional, Tuple
 
 import ximu3
+### Notes - use verbose var names
+# - we need indpendent validation of expected sample rate for each connection. - statistics callback
+# - define sampling configurations - class, json, etc - drop down of sample frameworks
 
 # --------------------------- Low-level helpers --------------------------- #
 def _connect(device_name: str) -> ximu3.Connection:
@@ -94,7 +97,7 @@ class TwintigLogger:
 
     def open(self) -> None:
         if self._open:
-            return
+            return # flag an error if already open
         # Connect to tap pads + carpus (mux controller)
         self._tap_conn = _connect(self.TAP_PADS_NAME)
         self._carpus_conn = _connect(self.CARPUS_NAME)
@@ -104,19 +107,21 @@ class TwintigLogger:
 
         # Connect IMUs via mux (0x41..0x50)
         connect_infos = [
-            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(65, 85)
+            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(0x41, 0x50)
         ]
         self._imu_conns = [ximu3.Connection(ci) for ci in connect_infos]
         for c in self._imu_conns:
             result = c.open()
             if result != ximu3.RESULT_OK:
-                raise RuntimeError("Unable to open IMU mux connection")
+                raise RuntimeError("Unable to open IMU mux connection") # specify failed connection
 
-            try:
-                c.add_inertial_callback(self._imu_inertial_callback)
-            except AttributeError:
-                # Some SDK builds may use different names; ignore if missing
-                pass
+            # _imu_inertial_callback - VERY intensive - use statistics callback instead for msg rate. - one per connection - needs summing.
+
+            # try:
+            #     c.add_inertial_callback(self._imu_inertial_callback) # 
+            # except AttributeError:
+            #     # Some SDK builds may use different names; ignore if missing
+            #     pass
 
         # Pre-sync timestamps
         _send_timestamp(self._tap_conn)
@@ -134,7 +139,7 @@ class TwintigLogger:
         timestamp so repeated runs don't crash with "Entity already exists".
         """
         if not self._open:
-            self.open()
+            self.open() # make a decision over opening requirements
         # Determine target path
         base_path = os.path.join(self.log_destination, self.log_name)
 
@@ -160,23 +165,17 @@ class TwintigLogger:
 
         # Start logger across tap + all IMUs
         conns = [self._tap_conn] + self._imu_conns
-        assert all(conns)
+
         self._data_logger = ximu3.DataLogger(self.log_destination, self.log_name, conns)  # type: ignore[arg-type]
         result = self._data_logger.get_result()
         if result != ximu3.RESULT_OK:
-            # Final safety: if the only issue is entity exists, retry once with timestamped name
-            msg = ximu3.result_to_string(result)
-            if make_unique_on_conflict and "Entity already exists" in msg:
-                self.log_name = self.log_name + time.strftime(" %Y-%m-%d_%H-%M-%S")
-                self._data_logger = ximu3.DataLogger(
-                    self.log_destination, self.log_name, conns
-                )  # retry
-                result = self._data_logger.get_result()
-            if result != ximu3.RESULT_OK:
-                raise RuntimeError(
-                    f"Data logger failed. {ximu3.result_to_string(result)}"
-                )
-            
+            raise RuntimeError(
+                f"Data logger failed. {ximu3.result_to_string(result)}"
+            )
+       
+
+
+    # redundant because of statistics_callback    
     def get_msg_rate_hz(self, horizon_s: float = 2.0) -> float:
         """Return aggregate incoming message rate (Hz) over the last ~horizon_s seconds."""
         with self._latest_lock:

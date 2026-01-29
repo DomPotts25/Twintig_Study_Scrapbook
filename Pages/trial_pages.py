@@ -1,5 +1,6 @@
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
+from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -25,13 +26,13 @@ class RunTrialsPage(ExperimenterPage):
         row.addStretch(1)
         row.addWidget(self.btn_start)
         row.addWidget(self.btn_stop)
-        self.log = QtWidgets.QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setPlaceholderText("Trial log...")
+        # self.log = QtWidgets.QPlainTextEdit()
+        # self.log.setReadOnly(True)
+        # self.log.setPlaceholderText("Trial log...")
         wrap = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(wrap)
         v.addLayout(row)
-        v.addWidget(self.log, 1)
+        #v.addWidget(self.log, 1)
         self.add_content_widget(wrap)
 
         # Demo/testing only: hidden controller triggers (you'll call requestTransition from real logic)
@@ -46,3 +47,7 @@ class RunTrialsPage(ExperimenterPage):
         demo_wrap = QtWidgets.QWidget()
         demo_wrap.setLayout(demo)
         self.add_content_widget(demo_wrap)
+
+        self.studyPhaseRequested.emit(
+            StudyPhases.TRIAL
+        ) 
