@@ -15,30 +15,21 @@ def connect(device_name: str) -> ximu3.Connection:
     if not devices:
         raise Exception(f"Unable to find {device_name}")
 
-    connection = ximu3.Connection(devices[0].connection_info)
+    connection = ximu3.Connection(devices[0].connection_config)
 
-    result = connection.open()
-
-    if result != ximu3.RESULT_OK:
-        raise Exception(
-            f"Unable to open connection {connection.get_info().to_string()}. {ximu3.result_to_string(result)}"
-        )
+    connection.open()
 
     return connection
 
 
 def send_timestamp(connection: ximu3.Connection) -> None:
-    responses = connection.send_commands(
-        [f'{{"timestamp":{time.time_ns() // 1000}}}'], 0, 500
-    )
+    response = connection.send_command(f'{{"timestamp":{time.time_ns() // 1000}}}')
 
-    if not responses:
-        raise Exception(f"No response to for {connection.get_info()}")
+    if not response:
+        raise Exception(f"No response to for {connection.get_config()}")
 
-    command_message = ximu3.CommandMessage.parse(responses[0])
-
-    if command_message.error:
-        raise Exception(command_message.error)
+    if response.error:
+        raise Exception(response.error)
 
 
 # Connect to tap pads and carpus
@@ -66,11 +57,11 @@ tap_pads_connection.add_serial_accessory_callback(serial_accessory_callback)
 
 
 # Connect to IMUs
-connectin_infos = [
-    ximu3.MuxConnectionInfo(c, carpus_connection) for c in range(65, 85)
-]  # mux channels 0x41 to 0x50
+configs = [
+    ximu3.MuxConnectionConfig(c, carpus_connection) for c in range(0x41, 0x55)
+]
 
-imu_connections = [ximu3.Connection(c) for c in connectin_infos]
+imu_connections = [ximu3.Connection(c) for c in configs]
 
 for result in [c.open() for c in imu_connections]:
     if result != ximu3.RESULT_OK:
@@ -90,11 +81,6 @@ if os.path.isdir(path):
 data_logger = ximu3.DataLogger(
     destination, name, [tap_pads_connection] + imu_connections
 )
-
-result = data_logger.get_result()
-
-if result != ximu3.RESULT_OK:
-    raise Exception(f"Data logger failed. {ximu3.result_to_string(result)}")
 
 # Set timestamps
 send_timestamp(tap_pads_connection)

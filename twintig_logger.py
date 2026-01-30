@@ -17,30 +17,23 @@ def _connect(device_name: str) -> ximu3.Connection:
     devices = ximu3.PortScanner.scan()
     time.sleep(0.1)  # wait for ports to close
     devices = [d for d in devices if d.device_name == device_name]
+    
     if not devices:
         raise RuntimeError(f"Unable to find {device_name}")
-    connection = ximu3.Connection(devices[0].connection_info)
-    result = connection.open()
-    if result != ximu3.RESULT_OK:
-        raise RuntimeError(
-            f"Unable to open connection {connection.get_info().to_string()}. {ximu3.result_to_string(result)}"
-        )
+    
+    connection = ximu3.Connection(devices[0].connection_config)
+    connection.open()
+
     return connection
 
-
 def _send_timestamp(connection: ximu3.Connection) -> None:
-    responses = connection.send_commands(
-        [f'{{"timestamp":{time.time_ns() // 1000}}}'], 0, 500
-    )
+    response = connection.send_command(f'{{"timestamp":{time.time_ns() // 1000}}}')
 
-    if not responses:
-        raise RuntimeError(f"No response to for {connection.get_info()}")
-    cmd = ximu3.CommandMessage.parse(responses[0])
-    if cmd.error:
-        raise RuntimeError(cmd.error)
+    if not response:
+        raise RuntimeError(f"No response to for {connection.get_config()}")
 
-
-
+    if response.error:
+        raise RuntimeError(response.error)
 
 # ------------------------------ Data Types ------------------------------ #
 @dataclass
@@ -88,7 +81,6 @@ class TwintigLogger:
         self._open = False
 
     # ------------------------ Lifecycle & Logging ------------------------ #
-
     def open(self) -> None:
         if self._open:
             return # flag an error if already open
@@ -104,14 +96,12 @@ class TwintigLogger:
         self._tap_conn.add_statistics_callback(self._tap_pads_stats_callback)
 
         # Connect IMUs via mux (0x41..0x50)
-        connect_infos = [
-            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(0x41, 0x55)
+        connect_configs = [
+            ximu3.MuxConnectionConfig(c, self._carpus_conn) for c in range(0x41, 0x55)
         ]
-        self._imu_conns = [ximu3.Connection(ci) for ci in connect_infos]
+        self._imu_conns = [ximu3.Connection(ci) for ci in connect_configs]
         for c in self._imu_conns:
-            result = c.open()
-            if result != ximu3.RESULT_OK:
-                raise RuntimeError("Unable to open IMU mux connection") # specify failed connection
+            c.open()
 
         # Pre-sync timestamps
         _send_timestamp(self._tap_conn)
@@ -157,11 +147,6 @@ class TwintigLogger:
         conns = [self._tap_conn] + self._imu_conns
 
         self._data_logger = ximu3.DataLogger(self.log_destination, self.log_name, conns)  # type: ignore[arg-type]
-        result = self._data_logger.get_result()
-        if result != ximu3.RESULT_OK:
-            raise RuntimeError(
-                f"Data logger failed. {ximu3.result_to_string(result)}"
-            )
        
     def pause_logging(self) -> None:
         # Software pause; DataLogger continues, but we skip user callbacks
