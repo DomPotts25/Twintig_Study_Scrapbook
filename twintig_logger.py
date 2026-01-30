@@ -45,8 +45,6 @@ def _send_timestamp(connection: ximu3.Connection) -> None:
 
 
 # ------------------------------ Data Types ------------------------------ #
-
-
 @dataclass
 class FSRPacket:
     timestamp_us: int
@@ -87,8 +85,6 @@ class TwintigLogger:
         self._fsr_callbacks: List[Callable[[FSRPacket], None]] = []
         self._latest_fsr: Optional[FSRPacket] = None
         self._latest_lock = threading.Lock()
-
-        self._traffic_ts: Deque[int] = deque(maxlen=4096)
 
         self._carpus_msg_rate: float = 0.0
         self._tap_pads_msg_rate: float = 0.0
@@ -185,34 +181,36 @@ class TwintigLogger:
 
     def close(self) -> None:
         self.stop_logging()
-        # Best effort; ximu3 connections are closed on GC too.
+        
         try:
             if self._tap_conn:
                 self._tap_conn.close()
         finally:
             self._tap_conn = None
+        
         try:
             if self._carpus_conn:
                 self._carpus_conn.close()
         finally:
             self._carpus_conn = None
+
         for c in self._imu_conns:
             try:
                 c.close()
             except Exception:
                 pass
         self._imu_conns.clear()
+
         with self._latest_lock:
             self._latest_fsr = None
-            self._traffic_ts.clear()
         self._open = False
-
-        self._open = False
+        self._carpus_msg_rate = 0.0
+        self._tap_pads_msg_rate = 0.0
 
     # ----------------------------- Callbacks ----------------------------- #
 
-    def add_fsr_callback(self, cb: Callable[[FSRPacket], None]) -> None:
-        self._fsr_callbacks.append(cb)
+    def add_fsr_callback(self, callback: Callable[[FSRPacket], None]) -> None:
+        self._fsr_callbacks.append(callback)
 
     def clear_fsr_callbacks(self) -> None:
         self._fsr_callbacks.clear()
@@ -228,16 +226,12 @@ class TwintigLogger:
             values = [float(v) for v in message.string.split(",")]
         except Exception:
             return
+        
         pkt = FSRPacket(timestamp_us=message.timestamp, values=values)
+        print(values)
+
         with self._latest_lock:
             self._latest_fsr = pkt
-            self._traffic_ts.append(pkt.timestamp_us) 
-        for cb in self._fsr_callbacks:
-            try:
-                cb(pkt)
-            except Exception:
-                # Never crash the callback chain
-                pass
 
     def _carpus_stats_callback(self, message: ximu3.Statistics):
         if self._paused:

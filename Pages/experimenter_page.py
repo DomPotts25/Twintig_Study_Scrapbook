@@ -219,7 +219,7 @@ class ExperimenterPage(QtWidgets.QWidget):
             self._append_to_log_widget(line)
         self.log_bus.message.connect(self._append_to_log_widget)
 
-    # ---------- NEW: Participant ID API ----------
+     # ---------- Experiment context chips ----------
     def set_participant_id(self, pid: str | None):
         """Called by controller to propagate the active participant ID."""
         self._participant_id = pid
@@ -227,7 +227,6 @@ class ExperimenterPage(QtWidgets.QWidget):
             f"Participant: {pid}" if pid not in (None, "") else "Participant: —"
         )
 
-    # ---------- Experiment context chips API ----------
     def set_study_phase(self, phase):
         """phase can be a StudyPhases enum, string, or None."""
         self._study_phase = phase
@@ -275,7 +274,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         txt = "—"
         if gesture not in (None, ""):
             txt = getattr(gesture, "name", str(gesture))
-        self._lbl_gesture.setText(f"Group: {txt}")
+        self._lbl_gesture.setText(f"Gesture: {txt}")
 
     # All logging should go through the bus so it appears on every page
     def append_log(self, text: str):
@@ -297,16 +296,6 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._pads_msg_rate_hz = logger._tap_pads_msg_rate
         self._refresh_indicators()
 
-    # ------------ internal: FSR → message-rate ------------
-    def _fsr_rx(self, pkt: FSRPacket):
-        # compute Hz over a short rolling time window
-        self._ts_window_us.append(pkt.timestamp_us)
-        if len(self._ts_window_us) >= 2:
-            dt_us = self._ts_window_us[-1] - self._ts_window_us[0]
-            if dt_us > 0:
-                hz = (len(self._ts_window_us) - 1) / (dt_us / 1_000_000.0)
-                self.set_msg_rate(hz)
-
     # ------------ device lifecycle handlers ------------
     @QtCore.Slot()
     def _on_connect_clicked(self):
@@ -327,54 +316,9 @@ class ExperimenterPage(QtWidgets.QWidget):
         try:
             self._logger.close()
             self.append_log("Devices disconnected.")
+            self.set_msg_rate(0.0)
         except Exception as e:
             self.append_log(f"Close error: {e}")
-
-    @QtCore.Slot()
-    def _on_start_rec_clicked(self):
-        if not self._logger:
-            return
-        if not self._logger.is_open:
-            # auto-open if user presses record first
-            try:
-                self._logger.open()
-            except Exception as e:
-                self.log_bus.log(f"Open before record failed: {e}")
-                QtWidgets.QMessageBox.critical(self, "Record failed", str(e))
-                return
-            self._logger.add_fsr_callback(self._fsr_rx)
-            self._devices_connected = True
-
-        # Optional: make per-participant folder names
-        log_name = "Logged Data"
-        pid = getattr(self, "participant_id", lambda: None)()
-        if pid:
-            log_name = f"PID_{pid}"
-
-        try:
-            # You can also pass delete_existing / make_unique_on_conflict here
-            self._logger.log_name = log_name
-            self._logger.start_logging()
-        except Exception as e:
-            self.log_bus.log(f"Start logging failed: {e}")
-            QtWidgets.QMessageBox.critical(self, "Record failed", str(e))
-            return
-
-        self._recording = True
-        self.log_bus.log(f"Recording started → {self._logger.log_name}")
-        self._refresh_indicators()
-
-    @QtCore.Slot()
-    def _on_stop_rec_clicked(self):
-        if not self._logger:
-            return
-        try:
-            self._logger.stop_logging()
-        except Exception as e:
-            self.log_bus.log(f"Stop logging error: {e}")
-        self._recording = False
-        self.log_bus.log("Recording stopped.")
-        self._refresh_indicators()
 
     # ---------- Public status helpers ----------
     def set_status(self, text: str):
@@ -391,11 +335,6 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._carpus_msg_rate_hz = max(0.0, float(hz))
         self._pads_msg_rate_hz = max(0.0, float(hz))
         self._refresh_indicators()
-
-    def set_recording(self, recording: bool):
-        self._recording = recording
-        self._refresh_indicators()
-        self.recordingToggled.emit(recording)
 
     def set_paused(self, paused: bool):
         self._paused = paused
@@ -450,7 +389,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         set_led(self._led_pads_msg, self._pads_msg_rate_hz > 0.1)
         self._lbl_pads_msg.setText(f"Tap Pads Msg rate: {self._pads_msg_rate_hz:.1f} Hz")
 
-        set_led(self._led_rec, self._recording, on_color="#fa0")
+        set_led(self._led_rec, self._recording, on_color="#fa0")        
         self._lbl_rec.setText(f"Recording: {'On' if self._recording else 'Off'}")
 
     def showEvent(self, e: QtGui.QShowEvent):
@@ -466,11 +405,12 @@ class ExperimenterPage(QtWidgets.QWidget):
     def _poll_logger_state(self):
         if not self._logger:
             return
+        
         self._devices_connected = self._logger.is_open
         self._recording = self._logger.is_logging
         self._carpus_msg_rate_hz = self._logger._carpus_msg_rate
         self._pads_msg_rate_hz = self._logger._tap_pads_msg_rate
-
+        #print("refreshing indicators")
         self._refresh_indicators()
 
 
