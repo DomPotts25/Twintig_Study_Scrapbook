@@ -11,10 +11,8 @@ from typing import Callable, Deque, List, Optional, Tuple
 
 import ximu3
 ### Notes - use verbose var names
-# - we need indpendent validation of expected sample rate for each connection. - statistics callback
 # - define sampling configurations - class, json, etc - drop down of sample frameworks
 
-# --------------------------- Low-level helpers --------------------------- #
 def _connect(device_name: str) -> ximu3.Connection:
     devices = ximu3.PortScanner.scan()
     time.sleep(0.1)  # wait for ports to close
@@ -52,8 +50,6 @@ class FSRPacket:
 
 
 # ------------------------------ Main Class ------------------------------ #
-
-
 class TwintigLogger:
     """High-level API for Twintig devices.
 
@@ -82,7 +78,6 @@ class TwintigLogger:
         self._imu_conns: List[ximu3.Connection] = []
         self._data_logger: Optional[ximu3.DataLogger] = None
 
-        self._fsr_callbacks: List[Callable[[FSRPacket], None]] = []
         self._latest_fsr: Optional[FSRPacket] = None
         self._latest_lock = threading.Lock()
 
@@ -110,7 +105,7 @@ class TwintigLogger:
 
         # Connect IMUs via mux (0x41..0x50)
         connect_infos = [
-            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(0x41, 0x50)
+            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(0x41, 0x55)
         ]
         self._imu_conns = [ximu3.Connection(ci) for ci in connect_infos]
         for c in self._imu_conns:
@@ -208,13 +203,6 @@ class TwintigLogger:
         self._tap_pads_msg_rate = 0.0
 
     # ----------------------------- Callbacks ----------------------------- #
-
-    def add_fsr_callback(self, callback: Callable[[FSRPacket], None]) -> None:
-        self._fsr_callbacks.append(callback)
-
-    def clear_fsr_callbacks(self) -> None:
-        self._fsr_callbacks.clear()
-
     def get_latest_fsr(self) -> Optional[FSRPacket]:
         with self._latest_lock:
             return self._latest_fsr
@@ -250,21 +238,3 @@ class TwintigLogger:
     @property
     def is_logging(self) -> bool:
         return self._data_logger is not None
-
-    def remove_fsr_callback(self, cb: Callable[[FSRPacket], None]) -> None:
-        try:
-            self._fsr_callbacks.remove(cb)
-        except ValueError:
-            pass
-
-
-# Convenience factory for quick scripts
-_default_logger: Optional[TwintigLogger] = None
-
-
-def get_logger() -> TwintigLogger:
-    global _default_logger
-    if _default_logger is None:
-        _default_logger = TwintigLogger()
-        _default_logger.open()
-    return _default_logger

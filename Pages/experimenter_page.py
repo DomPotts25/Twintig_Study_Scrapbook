@@ -296,7 +296,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._pads_msg_rate_hz = logger._tap_pads_msg_rate
         self._refresh_indicators()
 
-    # ------------ device lifecycle handlers ------------
+    # ------------ device handlers ------------
     @QtCore.Slot()
     def _on_connect_clicked(self):
         if not self._logger:
@@ -410,7 +410,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._recording = self._logger.is_logging
         self._carpus_msg_rate_hz = self._logger._carpus_msg_rate
         self._pads_msg_rate_hz = self._logger._tap_pads_msg_rate
-        #print("refreshing indicators")
+        
         self._refresh_indicators()
 
 

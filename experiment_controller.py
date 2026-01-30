@@ -175,7 +175,6 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         self.machine.setInitialState(self.states[start_page])
         self.machine.start()
 
-        # ---- Example controller wiring for the shared controls ----
         def handle_connect():
             self.log_bus.log("[ctrl] Connecting devices…")
             for p in self.pages.values():
