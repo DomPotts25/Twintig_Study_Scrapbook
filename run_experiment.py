@@ -1,3 +1,8 @@
+### ToDo:
+# - force reading handling
+# - force calibration procedure
+# - 
+
 import sys
 
 from PySide6 import QtCore, QtStateMachine, QtWidgets

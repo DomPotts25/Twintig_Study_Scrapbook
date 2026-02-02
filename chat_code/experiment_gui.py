@@ -231,8 +231,6 @@ class CalibrationManager(QtCore.QObject):
 
 
 # ------------------------------- UI Widgets ------------------------------- #
-
-
 class PowerBar(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -368,8 +366,6 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
 
 # ------------------------------- Controller ------------------------------- #
-
-
 class Controller(QtCore.QObject):
     def __init__(self, app: QtWidgets.QApplication):
         super().__init__()

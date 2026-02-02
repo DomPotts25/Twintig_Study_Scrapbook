@@ -5,7 +5,7 @@ from Pages.setup_page import SetupPage, TrialCheckPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
 from Pages.trial_pages import RunTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage
-from twintig_logger import TwintigLogger
+from twintig_interface import TwintigInterface
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -82,7 +82,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
     def __init__(self, start_page="Setup"):
         super().__init__()
 
-        self.logger = TwintigLogger()
+        self.logger = TwintigInterface()
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
 
@@ -129,7 +129,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
-                p.set_logger(self.logger)
+                p.set_twintig_interface(self.logger)
 
         # Build state machine
         self.machine = QStateMachine(self)
@@ -199,7 +199,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
-                p.set_logger(self.logger)
+                p.set_twintig_interface(self.logger)
 
         # After pages exist, push initial context into the chips
         self._broadcast_experiment_context()

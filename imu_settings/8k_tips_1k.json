@@ -1,0 +1,33 @@
+[
+    {
+        "name": "*",
+        "commands": [
+            "{\"colour\":null}",
+            "{\"default\":null}"
+        ]
+    },
+    {
+        "name": "*",
+        "commands": [
+            "{\"colour\":\"#000F0F\"}",
+            "{\"gyroscope_anti_aliasing\":585}",
+            "{\"accelerometer_anti_aliasing\":585}",
+            "{\"sample_rate\":1000}"
+        ]
+    },
+    {
+        "name": "*CH[123] IMU4",
+        "commands": [
+            "{\"colour\":\"#0F000F\"}",
+            "{\"gyroscope_anti_aliasing\":3979}",
+            "{\"accelerometer_anti_aliasing\":3979}",
+            "{\"sample_rate\":8000}"
+        ]
+    },
+    {
+        "name": "*",
+        "commands": [
+            "{\"colour\":null}"
+        ]
+    }
+]

@@ -1,16 +1,39 @@
 from collections import deque
 from typing import Deque
+from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
-from twintig_logger import FSRPacket, TwintigLogger
+from twintig_interface import FSRPacket, TwintigInterface
 
 import time
-
+import os
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
+def populate_imu_settings(combo: QtWidgets.QComboBox) -> None:
+    folder_path = Path(os.getcwd() + r"\imu_settings")
+    combo.clear()
+
+    if not folder_path.exists() or not folder_path.is_dir():
+        combo.addItem("(folder not found)")
+        combo.setEnabled(False)
+        return
+
+    combo.setEnabled(True)
+
+    json_files = sorted(folder_path.glob("*.json"), key=lambda p: p.name.lower())
+
+    if not json_files:
+        combo.addItem("(no .json files found)")
+        combo.setEnabled(False)
+        return
+
+    combo.addItem("Not Selected", None)
+    
+    for p in json_files:
+        combo.addItem(p.name, str(p))
 
 class LogBus(QtCore.QObject):
     message = QtCore.Signal(str)
@@ -44,23 +67,18 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.nav_buttons = {}
         self.back_button = None
 
-        self._logger: TwintigLogger | None = None
+        self._twintig_interface: TwintigInterface | None = None
         self._devices_connected: bool = False
         self._recording: bool = False
         self._carpus_msg_rate_hz: float = 0.0
         self._pads_msg_rate_hz: float = 0.0
 
         self._poll_timer = QtCore.QTimer(self)
-        self._poll_timer.setInterval(250)  # 4 Hz UI refresh is plenty
-        self._poll_timer.timeout.connect(self._poll_logger_state)
-
-        # rolling window for Hz (last 2 seconds)
-        self._ts_window_us: Deque[int] = deque(maxlen=512)
+        self._poll_timer.setInterval(250)
+        self._poll_timer.timeout.connect(self._poll_twintig_state)
 
         # Internal status
-        self._devices_connected = False
         self._paused = False
-        self._recording = False
         self._participant_id: str | None = None
         self._study_phase = None
         self._sample_group = None
@@ -192,11 +210,24 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.btn_connect = QtWidgets.QPushButton("Connect Devices")
         self.btn_disconnect = QtWidgets.QPushButton("Disconnect Devices")
         self.btn_pause_resume = QtWidgets.QPushButton("Pause Experiment")
+
+        self.imu_settings_combo = QtWidgets.QComboBox()
+        self.imu_settings_combo_label = QtWidgets.QLabel("Sampling framework")
+        populate_imu_settings(self.imu_settings_combo)
+        self.imu_settings_combo.currentIndexChanged.connect(self.on_imu_settings_changed)
+        self.btn_configure_imu_settings = QtWidgets.QPushButton("Configure IMU Sampling")
+
         self.btn_connect.clicked.connect(self._on_connect_clicked)
         self.btn_disconnect.clicked.connect(self._on_disconnect_clicked)
         self.btn_pause_resume.clicked.connect(self._on_pause_resume_clicked)
+        self.btn_configure_imu_settings.clicked.connect(self._on_configure_sampling_clicked)       
+
         ctrl_row.addWidget(self.btn_connect)
         ctrl_row.addWidget(self.btn_disconnect)
+        ctrl_row.addWidget(self.imu_settings_combo_label)
+        ctrl_row.addWidget(self.imu_settings_combo)
+        ctrl_row.addWidget(self.btn_configure_imu_settings)
+
         ctrl_row.addStretch(1)
         ctrl_row.addWidget(self.btn_pause_resume)
         panel_layout.addLayout(ctrl_row)
@@ -218,6 +249,10 @@ class ExperimenterPage(QtWidgets.QWidget):
         for line in self.log_bus.history:  # replay past messages
             self._append_to_log_widget(line)
         self.log_bus.message.connect(self._append_to_log_widget)
+
+    def on_imu_settings_changed(self, index: int) -> None:
+        file_path = self.imu_settings_combo.itemData(index, role=QtCore.Qt.ItemDataRole.UserRole)
+        self.append_log(f"Sampling Framework Selected: {file_path}")
 
      # ---------- Experiment context chips ----------
     def set_participant_id(self, pid: str | None):
@@ -287,23 +322,23 @@ class ExperimenterPage(QtWidgets.QWidget):
 
         # ------------ new: DI for the shared logger ------------
 
-    def set_logger(self, logger: TwintigLogger):
-        self._logger = logger
+    def set_twintig_interface(self, interface: TwintigInterface):
+        self._twintig_interface = interface
         # If already open (another page connected), reflect that in our LEDs/labels
-        self._devices_connected = logger.is_open
-        self._recording = logger.is_logging
-        self._carpus_msg_rate_hz = logger._carpus_msg_rate
-        self._pads_msg_rate_hz = logger._tap_pads_msg_rate
+        self._devices_connected = interface.is_open
+        self._recording = interface.is_logging
+        self._carpus_msg_rate_hz = interface._carpus_msg_rate
+        self._pads_msg_rate_hz = interface._tap_pads_msg_rate
         self._refresh_indicators()
 
     # ------------ device handlers ------------
     @QtCore.Slot()
     def _on_connect_clicked(self):
-        if not self._logger:
-            QtWidgets.QMessageBox.critical(self, "Error", "Logger not initialised.")
+        if not self._twintig_interface:
+            QtWidgets.QMessageBox.critical(self, "Error", "Twintig interface not initialised.")
             return
         try:
-            self._logger.open()
+            self._twintig_interface.open()
             self.append_log("Devices connected.")
         except Exception as e:
             self.append_log(f"Device open failed: {e}")
@@ -311,14 +346,29 @@ class ExperimenterPage(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def _on_disconnect_clicked(self):
-        if not self._logger:
+        if not self._twintig_interface:
             return
         try:
-            self._logger.close()
+            self._twintig_interface.close()
             self.append_log("Devices disconnected.")
             self.set_msg_rate(0.0)
         except Exception as e:
             self.append_log(f"Close error: {e}")
+    
+    @QtCore.Slot()
+    def _on_configure_sampling_clicked(self):
+        index = self.imu_settings_combo.currentIndex()
+        file_path = self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole)
+        
+        if(not self._twintig_interface.is_open):
+            self.append_log("Sampling Config not written, please connect devices")
+        elif(self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole) is None):
+            self.append_log("Sampling Config not written, please select a valid command file")
+        else:
+            self._twintig_interface.send_commands_to_twintig(file_path)
+            self.append_log("Sampling Config written to Twintig")
+        
+        return
 
     # ---------- Public status helpers ----------
     def set_status(self, text: str):
@@ -394,22 +444,22 @@ class ExperimenterPage(QtWidgets.QWidget):
 
     def showEvent(self, e: QtGui.QShowEvent):
         super().showEvent(e)
-        if self._logger:
+        if self._twintig_interface:
             self._poll_timer.start()
-            self._poll_logger_state()
+            self._poll_twintig_state()
 
     def hideEvent(self, e: QtGui.QHideEvent):
         self._poll_timer.stop()
         super().hideEvent(e)
 
-    def _poll_logger_state(self):
-        if not self._logger:
+    def _poll_twintig_state(self):
+        if not self._twintig_interface:
             return
         
-        self._devices_connected = self._logger.is_open
-        self._recording = self._logger.is_logging
-        self._carpus_msg_rate_hz = self._logger._carpus_msg_rate
-        self._pads_msg_rate_hz = self._logger._tap_pads_msg_rate
+        self._devices_connected = self._twintig_interface.is_open
+        self._recording = self._twintig_interface.is_logging
+        self._carpus_msg_rate_hz = self._twintig_interface._carpus_msg_rate
+        self._pads_msg_rate_hz = self._twintig_interface._tap_pads_msg_rate
         
         self._refresh_indicators()
 
