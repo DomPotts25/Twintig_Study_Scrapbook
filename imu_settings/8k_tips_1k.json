@@ -27,7 +27,8 @@
     {
         "name": "*",
         "commands": [
-            "{\"colour\":null}"
+            "{\"apply\":null}",
+            "{\"save\":null}"
         ]
     }
 ]

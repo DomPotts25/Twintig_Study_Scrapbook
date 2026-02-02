@@ -120,7 +120,7 @@ class TwintigInterface:
 
         self._open = True
 
-    def send_commands_to_twintig(self, command_file_path) -> None:
+    def send_commands_to_all(self, command_file_path) -> None:
         if(not self._open):
             return
 
@@ -131,6 +131,15 @@ class TwintigInterface:
             for imu_connection in [i for i in self._imu_connections if fnmatch(i.name, script["name"])]:
                 for command in script["commands"]:
                     imu_connection.send_command(command)
+
+
+    def send_command_to_all(self, command:str) -> None:
+        if(not self._open):
+            return
+        
+        for imu_connection in self._imu_connections:
+            imu_connection.send_command(command)
+
 
     def close(self) -> None:
         
@@ -173,7 +182,6 @@ class TwintigInterface:
             return
         
         pkt = FSRPacket(timestamp_us=message.timestamp, values=values)
-        #print(values)
 
         with self._latest_lock:
             self._latest_fsr = pkt

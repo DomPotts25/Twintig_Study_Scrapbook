@@ -1,7 +1,6 @@
 ### ToDo:
 # - force reading handling
 # - force calibration procedure
-# - 
 
 import sys
 

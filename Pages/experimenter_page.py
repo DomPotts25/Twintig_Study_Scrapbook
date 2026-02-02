@@ -216,17 +216,20 @@ class ExperimenterPage(QtWidgets.QWidget):
         populate_imu_settings(self.imu_settings_combo)
         self.imu_settings_combo.currentIndexChanged.connect(self.on_imu_settings_changed)
         self.btn_configure_imu_settings = QtWidgets.QPushButton("Configure IMU Sampling")
+        self.btn_disable_imu_leds = QtWidgets.QPushButton("Disable Twintig LEDs")
 
         self.btn_connect.clicked.connect(self._on_connect_clicked)
         self.btn_disconnect.clicked.connect(self._on_disconnect_clicked)
         self.btn_pause_resume.clicked.connect(self._on_pause_resume_clicked)
         self.btn_configure_imu_settings.clicked.connect(self._on_configure_sampling_clicked)       
+        self.btn_disable_imu_leds.clicked.connect(self._on_disable_leds)
 
         ctrl_row.addWidget(self.btn_connect)
         ctrl_row.addWidget(self.btn_disconnect)
         ctrl_row.addWidget(self.imu_settings_combo_label)
         ctrl_row.addWidget(self.imu_settings_combo)
         ctrl_row.addWidget(self.btn_configure_imu_settings)
+        ctrl_row.addWidget(self.btn_disable_imu_leds)
 
         ctrl_row.addStretch(1)
         ctrl_row.addWidget(self.btn_pause_resume)
@@ -365,10 +368,13 @@ class ExperimenterPage(QtWidgets.QWidget):
         elif(self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole) is None):
             self.append_log("Sampling Config not written, please select a valid command file")
         else:
-            self._twintig_interface.send_commands_to_twintig(file_path)
+            self._twintig_interface.send_commands_to_all(file_path)
             self.append_log("Sampling Config written to Twintig")
         
         return
+    
+    def _on_disable_leds(self):
+        self._twintig_interface.send_command_to_all('{"colour":null}')
 
     # ---------- Public status helpers ----------
     def set_status(self, text: str):
