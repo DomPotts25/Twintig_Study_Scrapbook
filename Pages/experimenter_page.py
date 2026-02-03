@@ -212,7 +212,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.btn_pause_resume = QtWidgets.QPushButton("Pause Experiment")
 
         self.imu_settings_combo = QtWidgets.QComboBox()
-        self.imu_settings_combo_label = QtWidgets.QLabel("Sampling framework")
+        self.imu_settings_combo_label = QtWidgets.QLabel("Sampling Configuration")
         populate_imu_settings(self.imu_settings_combo)
         self.imu_settings_combo.currentIndexChanged.connect(self.on_imu_settings_changed)
         self.btn_configure_imu_settings = QtWidgets.QPushButton("Configure IMU Sampling")
@@ -330,8 +330,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         # If already open (another page connected), reflect that in our LEDs/labels
         self._devices_connected = interface.is_open
         self._recording = interface.is_logging
-        self._carpus_msg_rate_hz = interface._carpus_msg_rate
-        self._pads_msg_rate_hz = interface._tap_pads_msg_rate
+        self._carpus_msg_rate_hz = interface.carpus_msg_rate
+        self._pads_msg_rate_hz = interface.tap_pads_msg_rate
         self._refresh_indicators()
 
     # ------------ device handlers ------------
@@ -464,8 +464,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         
         self._devices_connected = self._twintig_interface.is_open
         self._recording = self._twintig_interface.is_logging
-        self._carpus_msg_rate_hz = self._twintig_interface._carpus_msg_rate
-        self._pads_msg_rate_hz = self._twintig_interface._tap_pads_msg_rate
+        self._carpus_msg_rate_hz = self._twintig_interface.carpus_msg_rate
+        self._pads_msg_rate_hz = self._twintig_interface.tap_pads_msg_rate
         
         self._refresh_indicators()
 

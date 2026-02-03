@@ -4,7 +4,7 @@ from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.setup_page import SetupPage, TrialCheckPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
 from Pages.trial_pages import RunTrialsPage
-from Pages.calibration_pages import StillCalibPage, GenericPage
+from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
 
 QState = QtStateMachine.QState
@@ -72,6 +72,7 @@ PAGE_CLASS = {
     "TrialCheck": TrialCheckPage,
     "RunTrials": RunTrialsPage,
     "StillCalib": StillCalibPage,
+    "Velocity_Calib": VelocityCalibPage
 }
 
 # ---------- Controller ----------
