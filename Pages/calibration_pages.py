@@ -63,7 +63,7 @@ class StillCalibPage(ExperimenterPage):
 
 
 class VelocityCalibPage(ExperimenterPage):
-    TRIALS_PER_CONDITION = 2
+    TRIALS_PER_CONDITION = 10
 
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
