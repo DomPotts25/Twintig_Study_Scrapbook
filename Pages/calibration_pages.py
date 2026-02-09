@@ -1,10 +1,14 @@
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
+from Tools.velocity_calibration_analyser import VelocityCalibrationAnalyser
 
 import ximu3
 import shutil
 import os
+import time
+
+import numpy as np
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -61,9 +65,13 @@ class StillCalibPage(ExperimenterPage):
         ) 
         self.calibrationDone.emit("StillCalib")  # key matches Setup’s map
 
-
+# TODO: Add btn that allows to load previously collected Vel_Calib Data
 class VelocityCalibPage(ExperimenterPage):
-    TRIALS_PER_CONDITION = 10
+    
+    TRIALS_PER_CONDITION = 2
+    
+    velocityCalibrationDone = QtCore.Signal(object)
+    calibrationDone = QtCore.Signal(str)  # emits the page key
 
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
@@ -114,6 +122,7 @@ class VelocityCalibPage(ExperimenterPage):
                 f"Next Trial (Cond {cond_num}/{cond_total}: {gesture.value}-{velocity.value}, "
                 f"Trial {trial_num}/{self.TRIALS_PER_CONDITION})"
             )
+            self.get_participant_page().set_prompt(f"Please {gesture.value.capitalize()} the sample {velocity.value.capitalize()} - Trial {trial_num}/{self.TRIALS_PER_CONDITION}\n")
         else:
             self.btn_next_trial.setText("Next Velocity Trial")
 
@@ -123,6 +132,10 @@ class VelocityCalibPage(ExperimenterPage):
             self.log_bus.log("[vel_Cal]: Please connect devices and insert samples")
             return
         
+        self.studyPhaseRequested.emit(
+            StudyPhases.VELOCITY_CALIBRATION
+        )
+
         self._is_calibrating = True
         self._condition_index = 0
         self._trial_in_condition = 0
@@ -142,9 +155,11 @@ class VelocityCalibPage(ExperimenterPage):
         g, v = self._current_condition()
         self.log_bus.log(f"[vel_Cal]: Calibration begun. Starting {g.value}-{v.value}, trial 1")
 
-        #participant window update
+        page = self.get_participant_page()
+        if page:
+            page.set_prompt("Calibration Started, please follow the instructions")
 
-        self._update_ui_state()
+        QtCore.QTimer.singleShot(2000, self._update_ui_state)
 
     def __on_next_trial_clicked(self) -> None:
         if not self._is_calibrating:
@@ -161,8 +176,14 @@ class VelocityCalibPage(ExperimenterPage):
         )
 
         self._trial_in_condition += 1
-        # Update participant window
+        page = self.get_participant_page()
+        if page:
+            page.set_prompt(f"Please {gesture.value.capitalize()} the sample {velocity.value.capitalize()} - Trial {self._trial_in_condition}/{self.TRIALS_PER_CONDITION}\n Trial Complete")
 
+        QtCore.QTimer.singleShot(1000, self.__update_after_trial_complete)
+
+
+    def __update_after_trial_complete(self):        
         if self._trial_in_condition >= self.TRIALS_PER_CONDITION:
             self._trial_in_condition = 0
             self._condition_index += 1
@@ -184,13 +205,42 @@ class VelocityCalibPage(ExperimenterPage):
         if not self._is_calibrating:
             return
 
+        self.studyPhaseRequested.emit(
+            StudyPhases.SETUP
+        )
+
         self._is_calibrating = False
 
         del self.__velocityCalDataLogger
 
         self.log_bus.log("[vel_Cal]: Calibration complete")
 
-        # participant window update
-        # compute thresholds, etc.
+        self.get_participant_page().set_prompt("Calibration Complete! \n Please wait for further instructions...")
 
         self._update_ui_state()
+
+        vel_calibration_analyser = VelocityCalibrationAnalyser(
+        data_dir=os.getcwd()+r"\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")
+
+        vel_calibration_analyser.run()
+
+        summary = vel_calibration_analyser.get_summary()
+        self.log_bus.log(summary.to_string)
+
+        data_by_condition = vel_calibration_analyser.get_max_force_by_condition()
+
+        velocity_calibration_results = {}
+
+        for (gesture, velocity), values in data_by_condition.items():
+            values = np.asarray(values, dtype=float)
+
+            mean_force = float(np.nanmean(values))
+            std_force = float(np.nanstd(values))
+
+            velocity_calibration_results[(gesture, velocity)] = {
+                "mean": mean_force,
+                "std": std_force,
+            }
+        
+        self.velocityCalibrationDone.emit(velocity_calibration_results)
+        self.calibrationDone.emit("Velocity_Calib")  # key matches Setup’s map

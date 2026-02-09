@@ -4,7 +4,9 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
-from twintig_interface import FSRPacket, TwintigInterface
+from twintig_interface import TwintigInterface
+
+from participant_page import ParticipantWindow
 
 import time
 import os
@@ -68,6 +70,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.back_button = None
 
         self._twintig_interface: TwintigInterface | None = None
+        self.__participant_page: ParticipantWindow | None = None
         self._devices_connected: bool = False
         self._recording: bool = False
         self._carpus_msg_rate_hz: float = 0.0
@@ -256,6 +259,12 @@ class ExperimenterPage(QtWidgets.QWidget):
     def on_imu_settings_changed(self, index: int) -> None:
         file_path = self.imu_settings_combo.itemData(index, role=QtCore.Qt.ItemDataRole.UserRole)
         self.append_log(f"Sampling Framework Selected: {file_path}")
+
+    def set_participant_page(self, page: ParticipantWindow):
+        self.__participant_page = page
+
+    def get_participant_page(self) -> ParticipantWindow | None:
+        return self.__participant_page
 
      # ---------- Experiment context chips ----------
     def set_participant_id(self, pid: str | None):

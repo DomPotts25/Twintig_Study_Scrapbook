@@ -7,6 +7,8 @@ from Pages.trial_pages import RunTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
 
+from participant_page import ParticipantWindow
+
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
@@ -39,14 +41,12 @@ ALL_PAGES = sorted({*GRAPH.keys(), *(n for outs in GRAPH.values() for n in outs)
 # ----------- 2) Navigation policy (what appears in the main nav bar) -----------
 # Buttons shown per page (subset of GRAPH[page])
 MAIN_NAV = {
-    "Setup": ["TrialCheck"],  # only Setup2 in main nav
-    #"Setup2": ["Setup3"],  # only Setup3 in main nav
-    #"Setup3": ["TrialCheck"],  # only TrialCheck in main nav
-    "TrialCheck": ["RunTrials"],  # only RunTrials in main nav
-    "RunTrials": [],  # controller-driven only
+    "Setup": ["TrialCheck"],
+    "TrialCheck": ["RunTrials"],
+    "RunTrials": [],
     "GestureChange": ["RunTrials"],
     "SampleChange": ["RunTrials"],
-    # Others (calibration & EndTrials) show no forward nav
+
     "StillCalib": [],
     "ROM_1_Calib": [],
     "ROM_2_Calib": [],
@@ -79,11 +79,13 @@ PAGE_CLASS = {
 class ExperimenterWindow(QtWidgets.QMainWindow):
 
     pageEntered = QtCore.Signal(str)  # page name
-
+    
     def __init__(self, start_page="Setup"):
         super().__init__()
 
-        self.logger = TwintigInterface()
+        self.twintig_interface = TwintigInterface()
+        self.velocity_calibration: dict | None = None
+
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
 
@@ -104,7 +106,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         self.curr_trial_valid = True
         
         self.gesture_sequence: list[Gestures] = []
-        self.sample_sequence: list[SampleGroup] = []
+        self.sample_group_sequence: list[SampleGroup] = []
 
         # Experimenter log window output
         self.log_bus = LogBus()
@@ -124,13 +126,22 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             setup.gestureOrderCommitted.connect(self.set_gesture_sequence)
             setup.sampleOrderCommitted.connect(self.set_sample_sequence)
 
+
+        # Calibration flag wiring
         still = self.pages.get("StillCalib")
         if isinstance(still, StillCalibPage) and hasattr(setup, "on_calibration_done"):
             still.calibrationDone.connect(setup.on_calibration_done)
 
+        still = self.pages.get("Velocity_Calib")
+        if isinstance(still, VelocityCalibPage) and hasattr(setup, "on_calibration_done"):
+            still.calibrationDone.connect(setup.on_calibration_done)
+
+
+
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
-                p.set_twintig_interface(self.logger)
+                p.set_twintig_interface(self.twintig_interface)
+
 
         # Build state machine
         self.machine = QStateMachine(self)
@@ -200,10 +211,24 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
-                p.set_twintig_interface(self.logger)
+                p.set_twintig_interface(self.twintig_interface)
 
-        # After pages exist, push initial context into the chips
+        vel_page = self.pages.get("Velocity_Calib")
+        if isinstance(vel_page, VelocityCalibPage):
+            vel_page.velocityCalibrationDone.connect(self.set_velocity_calibration)
+        
         self._broadcast_experiment_context()
+
+    def connect_participant_window(self, participant_page: ParticipantWindow):
+        for p in self.pages.values():
+            if isinstance(p, ExperimenterPage):
+                p.set_participant_page(participant_page)
+
+    def set_velocity_calibration(self, calib_data: dict):
+        self.velocity_calibration = calib_data
+            
+        self.log_bus.log(f"[ctrl] Velocity calibration loaded ({len(calib_data)} conditions)")
+        self.log_bus.log(f"[ctrl] Example key: {next(iter(calib_data.keys()), None)}")
 
     @QtCore.Slot(int)
     def _on_page_changed(self, index: int):
@@ -297,10 +322,10 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(object)
     def set_sample_sequence(self, samples):
         """Store and log the sample order for this participant."""
-        self.sample_sequence = list(samples or [])
+        self.sample_group_sequence = list(samples or [])
 
         labels = []
-        for s in self.sample_sequence:
+        for s in self.sample_group_sequence:
             if s is None:
                 continue
             labels.append(getattr(s, "name", str(s)))
@@ -312,7 +337,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         else:
             self.log_bus.log("[ctrl] Sample order for this participant: (empty)")
         
-        self.set_sample_group(self.sample_sequence[0])
+        self.set_sample_group(self.sample_group_sequence[0])
 
     def _emit_edge(self, src: str, tgt: str):
         if (src, tgt) in self._edge_emitters:

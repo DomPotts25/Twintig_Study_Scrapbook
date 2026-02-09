@@ -16,7 +16,7 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     experimenter_window = experiment_controller.ExperimenterWindow()
     participant_window = participant_page.ParticipantWindow()
-
+    experimenter_window.connect_participant_window(participant_window)
     # Place on two displays if present
     screens = app.screens()
     if len(screens) >= 2:
@@ -33,6 +33,8 @@ def main():
 
     experimenter_window.showMaximized()
     participant_window.showFullScreen()
+
+    
 
     sys.exit(app.exec())
 

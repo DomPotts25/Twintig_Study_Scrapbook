@@ -7,7 +7,7 @@ QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
 
-# ------------------ Example page subclasses ------------------
+# TODO: Velocity Calibration Page does not update setup page LED
 class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
     gestureOrderCommitted = QtCore.Signal(object)  # list[Gestures]
@@ -19,7 +19,7 @@ class SetupPage(ExperimenterPage):
 
         # Track calibration completion flags for the 5 required calibrations
         self._cal_done: dict[str, bool] = {
-            "StillCalib": False,
+            "StillCalib": True,
             "ROM_1_Calib": True,
             "ROM_2_Calib": True,
             "Midair_Calib": True,
@@ -74,6 +74,7 @@ class SetupPage(ExperimenterPage):
         add_cal_row(1, "ROM_1_Calib", "ROM_1_Calib", cal_grid)
         add_cal_row(2, "ROM_2_Calib", "ROM_2_Calib", cal_grid)
         add_cal_row(3, "Midair_Calib", "Midair_Calib", cal_grid)
+        add_cal_row(4, "Velocity_Calib", "Velocity_Calib", cal_grid)
 
         # --- Gesture Info Group ---
         gesture_group = QtWidgets.QGroupBox("Gesture Assignments")
@@ -136,28 +137,15 @@ class SetupPage(ExperimenterPage):
             for label, enum_member in self._sample_options:
                 cb.addItem(label, userData=enum_member)
             
-            cb.currentIndexChanged.connect(self._on_sample_changed)
+            cb.currentIndexChanged.connect(self._on_sample_combo_box_changed)
             self.sample_combos.append(cb)
             sample_group_row.addWidget(cb)
         
-        # sample_combos = [(s.name, s) for s in SampleGroup]
-
-        # self.sample_cb = QtWidgets.QComboBox()
-        # self.sample_cb.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
-        # self.sample_cb.setMinimumWidth(140)
-        # self.sample_cb.addItem("— Select —", userData=None)
-        # for label, enum_member in sample_combos:
-        #     self.sample_cb.addItem(label, userData=enum_member)
-
-        #self.sample_check = QtWidgets.QCheckBox(" -> Sample Inserted")
-        # sample_group_row.addWidget(self.sample_cb)
-        #sample_group_row.addWidget(self.sample_check)
-
-        vel_cal_group = QtWidgets.QGroupBox("Velocity Calibration")
-        vel_cal_grid = QtWidgets.QGridLayout(vel_cal_group)
-        vel_cal_grid.setColumnStretch(0, 0)  # buttons column
-        vel_cal_grid.setColumnStretch(1, 1)  # status column can grow a bit but stays small
-        add_cal_row(0, "Velocity_Calib", "Velocity_Calib", vel_cal_grid)
+        # vel_cal_group = QtWidgets.QGroupBox("Velocity Calibration")
+        # vel_cal_grid = QtWidgets.QGridLayout(vel_cal_group)
+        # vel_cal_grid.setColumnStretch(0, 0)  # buttons column
+        # vel_cal_grid.setColumnStretch(1, 1)  # status column can grow a bit but stays small
+        # add_cal_row(0, "Velocity_Calib", "Velocity_Calib", vel_cal_grid)
 
         # --- Overall layout ---
         wrap = QtWidgets.QWidget()
@@ -170,8 +158,8 @@ class SetupPage(ExperimenterPage):
         v.addWidget(gesture_group)
         v.addSpacing(10)
         v.addWidget(sample_group)
-        v.addSpacing(10)
-        v.addWidget(vel_cal_group)
+        # v.addSpacing(10)
+        # v.addWidget(vel_cal_group)
         v.addStretch()
         self.add_content_widget(wrap)
 
@@ -301,7 +289,7 @@ class SetupPage(ExperimenterPage):
         return selected
     
     @QtCore.Slot()
-    def _on_sample_changed(self):
+    def _on_sample_combo_box_changed(self):
         """Rebuild each combo's items so already-chosen samples are unavailable in others."""
         selected = self._current_sample_selections()
 
@@ -318,9 +306,6 @@ class SetupPage(ExperimenterPage):
                 cb.clear()
                 cb.addItem("— Select —", userData=None)
 
-                # Refill with allowed options:
-                # show everything that's NOT chosen by others,
-                # plus the one this combo already has (so it doesn't vanish)
                 for label, enum_member in self._sample_options:
                     if enum_member == current_enum or enum_member not in selected:
                         cb.addItem(label, userData=enum_member)
@@ -371,11 +356,9 @@ class SetupPage(ExperimenterPage):
         if page_name in self._cal_done:
             self._cal_done[page_name] = bool(ok)
 
-    # ---- Example slot you can connect to your app’s signal ----
     @QtCore.Slot(str)
     def on_calibration_done(self, page_name: str):
         self.set_cal_status(page_name, True)
-
 
 class TrialCheckPage(ExperimenterPage):
     def __init__(self, name, log_bus):
