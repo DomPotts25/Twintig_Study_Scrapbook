@@ -6,6 +6,7 @@ from typing import List, Tuple
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
+from Tools.velocity_calibration_analyser import TrialBlockForceAnalyser
 
 import ximu3
 from ximu3 import DataLogger
@@ -257,6 +258,34 @@ class RunTrialsPage(ExperimenterPage):
 class GestureChangeReviewPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
+        lbl = QtWidgets.QLabel("Gesture Block Complete")
+        lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self.add_content_widget(lbl)
+
+        btn = QtWidgets.QPushButton("Inspect force data of last block")
+        btn.clicked.connect(self._on_inspect_force_clicked)
+        self.add_content_widget(btn)
+
+    def _on_inspect_force_clicked(self):
+        print(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser.run()
+        analyser.plot_scatter_by_sample_id(title="Last block: max force per trial (fast vs slow)")
+
+
+class SampleChangeReviewPage(ExperimenterPage):
+    def __init__(self, name, log_bus):
+        super().__init__(name, log_bus)
         lbl = QtWidgets.QLabel("Sample Block Complete")
         lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.add_content_widget(lbl)
+
+        btn = QtWidgets.QPushButton("Inspect force data of last block")
+        btn.clicked.connect(self._on_inspect_force_clicked)
+        self.add_content_widget(btn)
+
+    def _on_inspect_force_clicked(self):
+        print(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser.run()
+        analyser.plot_scatter_by_sample_id(title="Last block: max force per trial (fast vs slow)")

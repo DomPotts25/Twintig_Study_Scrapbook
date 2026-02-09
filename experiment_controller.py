@@ -3,7 +3,7 @@ from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
-from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage
+from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
 
@@ -74,6 +74,7 @@ PAGE_CLASS = {
     "StillCalib": StillCalibPage,
     "Velocity_Calib": VelocityCalibPage,
     "GestureChange": GestureChangeReviewPage,
+    "SampleChange": SampleChangeReviewPage,
     "EndTrials": EndTrialsPage
 }
 
