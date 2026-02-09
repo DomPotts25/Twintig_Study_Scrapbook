@@ -57,16 +57,13 @@ tap_pads_connection.add_serial_accessory_callback(serial_accessory_callback)
 
 
 # Connect to IMUs
-configs = [
-    ximu3.MuxConnectionConfig(c, carpus_connection) for c in range(0x41, 0x55)
-]
+configs = [ximu3.MuxConnectionConfig(c, carpus_connection) for c in range(0x41, 0x55)]
 
 imu_connections = [ximu3.Connection(c) for c in configs]
 
-for result in [c.open() for c in imu_connections]:
-    if result != ximu3.RESULT_OK:
-        raise Exception("Unable to open connection")
-
+for imu_connection in imu_connections:
+    imu_connection.open()
+    
 # Check if logged data already exists
 destination = os.path.dirname(os.path.abspath(__file__))
 name = "Logged Data"
@@ -74,13 +71,11 @@ name = "Logged Data"
 path = os.path.join(destination, name)
 
 if os.path.isdir(path):
-    if input(f"Delete existing {name}?  [Y/N]\n") in ["y", "Y"]:
+    if input(f"Delete existing {name}?  [Y/N]\n").lower() == "y":
         shutil.rmtree(path)
 
 # Start data logger
-data_logger = ximu3.DataLogger(
-    destination, name, [tap_pads_connection] + imu_connections
-)
+data_logger = ximu3.DataLogger(destination, name, [tap_pads_connection] + imu_connections)
 
 # Set timestamps
 send_timestamp(tap_pads_connection)
