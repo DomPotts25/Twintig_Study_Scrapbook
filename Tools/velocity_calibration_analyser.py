@@ -142,8 +142,6 @@ class VelocityCalibrationAnalyser:
         )
 
 
-
-
 def main():
     analyser = VelocityCalibrationAnalyser(
         data_dir=r"C:\Users\dm-potts-admin\Documents\Postdoc\UWE\Outside_Interactions\Object_Characterisation_Study\Study_Program\Twintig_Study_Scrapbook\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")

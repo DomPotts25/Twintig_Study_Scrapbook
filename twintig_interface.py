@@ -35,13 +35,6 @@ def _send_timestamp(connection: ximu3.Connection) -> None:
     if response.error:
         raise RuntimeError(response.error)
 
-# ------------------------------ Data Types ------------------------------ #
-@dataclass
-class FSRPacket:
-    timestamp_us: int
-    values: List[float]  # len == 8 (channels)
-
-
 class ImuConnection:
     def __init__(self, config: ximu3.MuxConnectionConfig) -> None:
         self.__connection = ximu3.Connection(config)
@@ -88,9 +81,6 @@ class TwintigInterface:
         self.__data_logger: Optional[ximu3.DataLogger] = None
         self.__imu_connections: List[ImuConnection] = []
 
-        self.__latest_fsr: Optional[FSRPacket] = None
-        self.__latest_lock = threading.Lock()
-
         self.__paused = False
         self.__open = False
 
@@ -106,9 +96,10 @@ class TwintigInterface:
         self.__tap_conn = _connect(self.TAP_PADS_NAME)
         self.__carpus_conn = _connect(self.CARPUS_NAME)
 
-        # Route serial accessory callback for FSRs
+        # For force readings
         self.__tap_conn.add_serial_accessory_callback(self._serial_accessory_callback)
         
+        # For sample rate etc.
         self.__carpus_conn.add_statistics_callback(self._carpus_stats_callback)
         self.__tap_conn.add_statistics_callback(self._tap_pads_stats_callback)
 
@@ -119,6 +110,9 @@ class TwintigInterface:
         _send_timestamp(self.__carpus_conn)
 
         self.__open = True
+    
+    def _temp_callback(self, message: ximu3.TemperatureMessage):
+        print(message.temperature)        
 
     def send_commands_to_all(self, command_file_path) -> None:
         if(not self.__open):
@@ -162,29 +156,13 @@ class TwintigInterface:
                 pass
         self.__imu_connections.clear()
 
-        with self.__latest_lock:
-            self.__latest_fsr = None
         self.__open = False
         self.carpus_msg_rate = 0.0
         self.tap_pads_msg_rate = 0.0
 
-    # ----------------------------- Callbacks ----------------------------- #
-    def get_latest_fsr(self) -> Optional[FSRPacket]:
-        with self.__latest_lock:
-            return self.__latest_fsr
-
     def _serial_accessory_callback(self, message: ximu3.SerialAccessoryMessage):
         if self.__paused:
-            return
-        try:
-            values = [float(v) for v in message.string.split(",")]
-        except Exception:
-            return
-        
-        pkt = FSRPacket(timestamp_us=message.timestamp, values=values)
-
-        with self.__latest_lock:
-            self.__latest_fsr = pkt
+            return        
 
     def _carpus_stats_callback(self, message: ximu3.Statistics):
         if self.__paused:
