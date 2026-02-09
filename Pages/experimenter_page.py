@@ -88,6 +88,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._sample_id: int | None = None
         self._sample_name: str | None = None
         self._gesture = None
+        self._velocity = None
         self._trial_id: int | None = None
 
         # Dark theme
@@ -126,6 +127,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._lbl_sample_id = QtWidgets.QLabel("Sample_ID: —")
         self._lbl_sample_name = QtWidgets.QLabel("Sample_Name: —")
         self._lbl_gesture = QtWidgets.QLabel("Gesture: —")
+        self._lbl_velocity = QtWidgets.QLabel("Velocity: —")
         self._lbl_trial = QtWidgets.QLabel("Trial: —")
 
         for lbl in (
@@ -135,6 +137,7 @@ class ExperimenterPage(QtWidgets.QWidget):
             self._lbl_sample_id,
             self._lbl_sample_name,
             self._lbl_gesture,
+            self._lbl_velocity,
             self._lbl_trial,
         ):
             lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -153,6 +156,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         chips_row.addWidget(self._lbl_sample_group)
         chips_row.addWidget(self._lbl_sample_id)
         chips_row.addWidget(self._lbl_sample_name)
+        chips_row.addWidget(self._lbl_velocity)
         chips_row.addWidget(self._lbl_trial)
         chips_row.addWidget(self._lbl_participant)
 
@@ -322,6 +326,14 @@ class ExperimenterPage(QtWidgets.QWidget):
         if gesture not in (None, ""):
             txt = getattr(gesture, "name", str(gesture))
         self._lbl_gesture.setText(f"Gesture: {txt}")
+
+    def set_velocity(self, velocity):
+        """Current trial index / ID, -1/None means 'no trial'."""
+        self._velocity = velocity
+        txt = "—"
+        if velocity not in (None, ""):
+            txt = getattr(velocity, "name", str(velocity))
+        self._lbl_velocity.setText(f"Velocity: {txt}")
 
     # All logging should go through the bus so it appears on every page
     def append_log(self, text: str):

@@ -140,12 +140,6 @@ class SetupPage(ExperimenterPage):
             cb.currentIndexChanged.connect(self._on_sample_combo_box_changed)
             self.sample_combos.append(cb)
             sample_group_row.addWidget(cb)
-        
-        # vel_cal_group = QtWidgets.QGroupBox("Velocity Calibration")
-        # vel_cal_grid = QtWidgets.QGridLayout(vel_cal_group)
-        # vel_cal_grid.setColumnStretch(0, 0)  # buttons column
-        # vel_cal_grid.setColumnStretch(1, 1)  # status column can grow a bit but stays small
-        # add_cal_row(0, "Velocity_Calib", "Velocity_Calib", vel_cal_grid)
 
         # --- Overall layout ---
         wrap = QtWidgets.QWidget()
@@ -225,12 +219,6 @@ class SetupPage(ExperimenterPage):
         if any(cb.currentData() is None for cb in self.sample_combos):
             issues.append("All sample assignments must be selected.")
 
-        # 5) Sample set & sample inserted ticked
-        # if self.sample_cb.currentData() is None:
-        #     issues.append("Sample Setup combo must be selected.")
-        # if not self.sample_check.isChecked():
-        #     issues.append("“Sample inserted” must be ticked.")
-
         return (len(issues) == 0, issues)
 
     def _current_gesture_selections(self) -> set:
@@ -247,22 +235,16 @@ class SetupPage(ExperimenterPage):
         """Rebuild each combo's items so already-chosen gestures are unavailable in others."""
         selected = self._current_gesture_selections()
 
-        # Rebuild each combo while preserving its current choice and blocking signals
+        # Rebuild each combo while preserving its current choice
         for cb in self.gesture_combos:
             keep = cb.currentData()  # enum member or None
 
             cb.blockSignals(True)
             try:
-                # Capture current text to restore index after rebuild
                 current_enum = keep
-
-                # Wipe and re-add placeholder
                 cb.clear()
                 cb.addItem("— Select —", userData=None)
 
-                # Refill with allowed options:
-                # show everything that's NOT chosen by others,
-                # plus the one this combo already has (so it doesn't vanish)
                 for label, enum_member in self._gesture_options:
                     if enum_member == current_enum or enum_member not in selected:
                         cb.addItem(label, userData=enum_member)
@@ -326,17 +308,15 @@ class SetupPage(ExperimenterPage):
     def _commit_pid(self):
         text = self.pid_input.text().strip()
 
-        # If a validator is set, this checks Acceptable directly
         if not self.pid_input.hasAcceptableInput():
             self.log_bus.log("Invalid Participant ID. Enter an integer 0–1000.")
             return
-
-        # Optional: normalize to int, then back to str if you want
+        
         pid_int = int(text)
         self.log_bus.log(f"Participant ID set to {pid_int}.")
-        self.participantIdCommitted.emit(str(pid_int))  # or emit the int if you prefer
+        self.participantIdCommitted.emit(str(pid_int))
 
-        # (Optional) lock after setting
+        # lock after setting
         # self.pid_input.setReadOnly(True)
         # self.pid_set_btn.setEnabled(False)
 
@@ -366,3 +346,11 @@ class TrialCheckPage(ExperimenterPage):
         self.set_status("Verify subject ready & parameters valid.")
         self.chk_ok = QtWidgets.QCheckBox("All checks passed")
         self.add_content_widget(self.chk_ok)
+
+
+class EndTrialsPage(ExperimenterPage):
+    def __init__(self, name, log_bus):
+        super().__init__(name, log_bus)
+        lbl = QtWidgets.QLabel("Experiment Finished")
+        lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self.add_content_widget(lbl)

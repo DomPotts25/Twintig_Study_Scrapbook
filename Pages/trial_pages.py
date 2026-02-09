@@ -7,6 +7,12 @@ from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 
+import ximu3
+from ximu3 import DataLogger
+
+import shutil
+import os
+
 class RunTrialsPage(ExperimenterPage):
 
     requestTransition = QtCore.Signal(str)  # "GestureChange" / "SampleChange" / "EndTrials"
@@ -15,37 +21,48 @@ class RunTrialsPage(ExperimenterPage):
         super().__init__(name, log_bus)
         self.set_status("Run trials.")
 
-        # ---------------- UI ----------------
         self.lbl_trial = QtWidgets.QLabel("Press Next trial to begin.")
         self.lbl_trial.setWordWrap(True)
+        self.lbl_next_gesture = QtWidgets.QLabel("")
+        self.lbl_next_gesture.setWordWrap(True)
 
+        self.btn_begin = QtWidgets.QPushButton("Begin trials")
         self.btn_next = QtWidgets.QPushButton("Next trial")
         self.btn_end = QtWidgets.QPushButton("End trials")
 
+        self.btn_next.setEnabled(False)
+        self.btn_begin.setEnabled(True)
+
         row = QtWidgets.QHBoxLayout()
-        
+
         row.addWidget(self.btn_end)
         row.addStretch(1)
+        row.addWidget(self.btn_begin)
         row.addWidget(self.btn_next)
 
         wrap = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(wrap)
+        v.addWidget(self.lbl_next_gesture)
         v.addWidget(self.lbl_trial)
         v.addLayout(row)
         self.add_content_widget(wrap)
 
+        self.btn_begin.clicked.connect(self._on_begin_trials)
         self.btn_next.clicked.connect(self._on_next_trial)
         self.btn_end.clicked.connect(lambda: self.requestTransition.emit("EndTrials"))
-
-        self._trial_id: int = 0
+        self.__sample_channels = [0,1,2,3]
+        self.__reps = [0,1,2]
+        self.__trial_id: int = 0
         self._sample_group_idx: int = 0
-        self._gesture_idx: int = 0
-        self._pending_trials: List[Tuple[int, Velocity, int]] = []  # (sample_id, velocity, repetition)
+        self.__gesture_idx: int = 0
+        self.__pending_trials: List[Tuple[int, Velocity, int]] = []  # (sample_id, velocity, repetition)
 
         self.studyPhaseRequested.emit(StudyPhases.TRIAL)
 
+        self.__forceDataLogger = None
+        self.__current_trial_ctx = None  # dict or None
+
     def _controller(self):
-        # ExperimenterWindow is the QMainWindow; this page is inside a QStackedWidget
         return self.window()
 
     def _gesture_sequence(self) -> List[Gestures]:
@@ -62,19 +79,31 @@ class RunTrialsPage(ExperimenterPage):
         Gesture + sample_group order is fixed by indices.
         """
         combos: List[Tuple[int, Velocity, int]] = []
-        for sample_id in (0, 1, 2, 3):
+        for sample_id in self.__sample_channels:
             for velocity in (Velocity.SLOW, Velocity.FAST):
-                for rep in (0, 1, 2):
+                for rep in self.__reps:
                     combos.append((sample_id, velocity, rep))
         random.shuffle(combos)
-        self._pending_trials = combos
+        self.__pending_trials = combos
 
     def _show_sample_group_complete_popup(self):
         QtWidgets.QMessageBox.information(self, "Complete", "Sample group complete!")
 
-    # ---------- main action ----------
-    @QtCore.Slot()
-    def _on_next_trial(self):
+    def _update_next_gesture_label(self):
+        gesture_seq = self._gesture_sequence()
+        if not gesture_seq:
+            self.lbl_next_gesture.setText("Next gesture: (not set)")
+            return
+
+        # If you’re between blocks and about to start the next gesture,
+        # this index already points at the upcoming gesture.
+        if 0 <= self.__gesture_idx < len(gesture_seq):
+            g = gesture_seq[self.__gesture_idx]
+            self.lbl_next_gesture.setText(f"Next gesture: {g}")
+        else:
+            self.lbl_next_gesture.setText("Next gesture: (complete)")
+    
+    def _load_one_trial(self) -> bool:
         ctrl = self._controller()
         gesture_seq = self._gesture_sequence()
         sample_group_seq = self._sample_group_sequence()
@@ -83,19 +112,18 @@ class RunTrialsPage(ExperimenterPage):
             self.lbl_trial.setText(
                 "No gesture/sample-group sequence set yet. Go to Setup and commit them first."
             )
-            return
+            return False
 
-        # If current block has no remaining randomized permutations, create or advance
-        if not self._pending_trials:
-            # first time OR we just finished a gesture block -> create list for this gesture
+        # If this block has no remaining randomized permutations, create them now
+        if not self.__pending_trials:
             self._make_trials_for_current_gesture()
 
-        # Pop next randomized permutation
-        sample_id, velocity, rep = self._pending_trials.pop()
+        # Pull next randomized permutation
+        sample_id, velocity, rep = self.__pending_trials.pop()
 
-        # Current fixed-order factors
+        # Fixed-order factors
         sample_group = sample_group_seq[self._sample_group_idx]
-        gesture = gesture_seq[self._gesture_idx]
+        gesture = gesture_seq[self.__gesture_idx]
 
         # Update controller state (best-effort)
         if hasattr(ctrl, "set_study_phase"):
@@ -105,48 +133,130 @@ class RunTrialsPage(ExperimenterPage):
         if hasattr(ctrl, "set_gesture"):
             ctrl.set_gesture(gesture)
         if hasattr(ctrl, "set_trial_id"):
-            ctrl.set_trial_id(self._trial_id)
+            ctrl.set_trial_id(self.__trial_id)
         if hasattr(ctrl, "set_sample_id"):
             ctrl.set_sample_id(sample_id)
         if hasattr(ctrl, "set_sample_name"):
-            # You currently don't have a mapping from (sample_group, sample_id) -> name,
-            # so we keep this simple and just store the id string.
             ctrl.set_sample_name(f"{sample_group}:{sample_id}")
         if hasattr(ctrl, "set_velocity"):
             ctrl.set_velocity(velocity)
 
         # Display
         self.lbl_trial.setText(
-            f"Trial {self._trial_id} | sample_group={sample_group} | gesture={gesture} "
+            f"Trial {self.__trial_id} | sample_group={sample_group} | gesture={gesture} "
             f"| sample_id={sample_id} | velocity={velocity} | repetition={rep}"
         )
         self.log_bus.log(
-            f"[trial] id={self._trial_id} group={sample_group} gesture={gesture} "
+            f"[trial] id={self.__trial_id} group={sample_group} gesture={gesture} "
             f"sample_id={sample_id} velocity={velocity} rep={rep}"
         )
 
-        self._trial_id += 1
+        self._current_trial_ctx = {
+            "trial_id": self.__trial_id,
+            "sample_group": sample_group,
+            "gesture": gesture,
+            "sample_id": sample_id,
+            "velocity": velocity,
+            "repetition": rep,
+        }
 
-        # If we just consumed the last permutation for this (sample_group, gesture) block:
-        if not self._pending_trials:
-            # advance gesture (fixed order)
-            self._gesture_idx += 1
+        self.__trial_id += 1
+        return True
+    
+    def _send_trial_end_note(self):
+        context = self._current_trial_ctx
+        if not context:
+            return
+        self._twintig_interface.send_command_to_tap_pads(
+            f'{{"note":"TRIAL {context["trial_id"]} END; '
+            f'gesture: {context["gesture"]}; '
+            f'sample_id: {context["sample_id"]}; '
+            f'velocity: {context["velocity"]}; '
+            f'repetition: {context["repetition"]};"}}'
+        )
 
-            if self._gesture_idx < len(gesture_seq):
-                # next gesture -> controller should show GestureChange page
+    @QtCore.Slot()
+    def _on_begin_trials(self):
+        # Load the first trial of the current block, then enable Next.
+        ok = self._load_one_trial()
+        if not ok:
+            return
+        
+        # create data logger for force data
+        out_dir = os.path.join(os.getcwd(), "Logged_Data", "Trial_Force_Data", "Tap_Pads_Data")
+        try:
+            shutil.rmtree(out_dir)
+        except Exception as e:
+            print(e)
+
+        self.__forceDataLogger = DataLogger(os.path.join(os.getcwd(), "Logged_Data", "Trial_Force_Data"), "Tap_Pads_Data", 
+                                            self._twintig_interface.get_tap_pads_connection_as_list())
+        
+
+        context = self._current_trial_ctx
+        self._twintig_interface.send_command_to_tap_pads(
+            f'{{"note":"TRIAL {context["trial_id"]} BEGIN; '
+            f'gesture: {context["gesture"]}; '
+            f'sample_id: {context["sample_id"]}; '
+            f'velocity: {context["velocity"]}; '
+            f'repetition: {context["repetition"]};"}}'
+        )
+
+        self.btn_begin.setEnabled(False)
+        self.btn_next.setEnabled(True)
+
+    # ---------- main action ----------
+    @QtCore.Slot()
+    def _on_next_trial(self):
+        # End the currently active trial
+        self._send_trial_end_note()
+
+        # If there is no next trial to load, we just ended the final trial of the block.
+        if not self.__pending_trials:
+            gesture_seq = self._gesture_sequence()
+            sample_group_seq = self._sample_group_sequence()
+
+            # tear down logger AFTER ending the final trial
+            del self.__forceDataLogger
+
+            # advance gesture/sample_group and transition
+            self.__gesture_idx += 1
+
+            if self.__gesture_idx < len(gesture_seq):
                 self.requestTransition.emit("GestureChange")
                 return
 
-            # gesture sequence finished for this sample group
-            self._gesture_idx = 0
+            self.__gesture_idx = 0
             self._sample_group_idx += 1
-
-            # popup before progressing to next sample group
             self._show_sample_group_complete_popup()
 
             if self._sample_group_idx < len(sample_group_seq):
-                # controller should show SampleChange page
                 self.requestTransition.emit("SampleChange")
             else:
-                # experiment finished
                 self.requestTransition.emit("EndTrials")
+            return
+
+        # Otherwise, load the next trial and continue within the block
+        ok = self._load_one_trial()
+        if not ok:
+            return
+    
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_next_gesture_label()
+        self._reset_for_entry()
+    
+    def _reset_for_entry(self):
+        # wipe old text + require begin again
+        self.lbl_trial.setText("Ready. Press Begin trials to load the first trial.")
+        self.btn_next.setEnabled(False)
+        self.btn_begin.setEnabled(True)
+
+
+
+class GestureChangeReviewPage(ExperimenterPage):
+    def __init__(self, name, log_bus):
+        super().__init__(name, log_bus)
+        lbl = QtWidgets.QLabel("Sample Block Complete")
+        lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self.add_content_widget(lbl)

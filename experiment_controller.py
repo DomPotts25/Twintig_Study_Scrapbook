@@ -1,9 +1,9 @@
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Pages.setup_page import SetupPage, TrialCheckPage
+from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
-from Pages.trial_pages import RunTrialsPage
+from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
 
@@ -72,7 +72,9 @@ PAGE_CLASS = {
     "TrialCheck": TrialCheckPage,
     "RunTrials": RunTrialsPage,
     "StillCalib": StillCalibPage,
-    "Velocity_Calib": VelocityCalibPage
+    "Velocity_Calib": VelocityCalibPage,
+    "GestureChange": GestureChangeReviewPage,
+    "EndTrials": EndTrialsPage
 }
 
 # ---------- Controller ----------
@@ -103,6 +105,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         self.curr_sample_id = -1
         self.curr_sample_name = None
         self.curr_gesture = None
+        self.curr_velocity = None
         self.curr_trial_valid = True
         
         self.gesture_sequence: list[Gestures] = []
@@ -257,6 +260,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
                     p.set_sample_group(self.curr_sample_group)
                     p.set_sample_id(self.curr_sample_id)
                     p.set_sample_name(self.curr_sample_name)
+                    p.set_velocity(self.curr_velocity)
                     p.set_trial_id(self.curr_trial_id)
                     p.set_gesture(self.curr_gesture)
 
@@ -297,6 +301,10 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
     def set_gesture(self, gesture: Gestures):
         self.curr_gesture = gesture
+        self._broadcast_experiment_context()
+
+    def set_velocity(self, velocity: Velocity):
+        self.curr_velocity = velocity
         self._broadcast_experiment_context()
 
     @QtCore.Slot(object)

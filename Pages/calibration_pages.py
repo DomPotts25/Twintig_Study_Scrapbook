@@ -149,7 +149,7 @@ class VelocityCalibPage(ExperimenterPage):
         self.__velocityCalDataLogger = ximu3.DataLogger(
             os.path.join(os.getcwd(), "Logged_Data", "Velocity_Calibration_Force_Data"),
             self.__NAME,
-            self._twintig_interface.get_tap_pads_connection_as_list(),
+            self._twintig_interface.get_tap_pads_connection_as_list()
         )
 
         g, v = self._current_condition()
