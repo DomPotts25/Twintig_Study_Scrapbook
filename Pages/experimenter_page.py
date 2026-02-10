@@ -70,7 +70,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.back_button = None
 
         self._twintig_interface: TwintigInterface | None = None
-        self.__participant_page: ParticipantWindow | None = None
+        self.__participant_window: ParticipantWindow | None = None
         self._devices_connected: bool = False
         self._recording: bool = False
         self._carpus_msg_rate_hz: float = 0.0
@@ -265,10 +265,10 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.append_log(f"Sampling Framework Selected: {file_path}")
 
     def set_participant_page(self, page: ParticipantWindow):
-        self.__participant_page = page
+        self.__participant_window = page
 
     def get_participant_page(self) -> ParticipantWindow | None:
-        return self.__participant_page
+        return self.__participant_window
 
      # ---------- Experiment context chips ----------
     def set_participant_id(self, pid: str | None):

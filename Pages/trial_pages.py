@@ -6,7 +6,7 @@ from typing import List, Tuple
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_calibration_analyser import TrialBlockForceAnalyser
+from Tools.velocity_analyser import TrialBlockForceAnalyser
 
 import ximu3
 from ximu3 import DataLogger
@@ -50,7 +50,7 @@ class RunTrialsPage(ExperimenterPage):
 
         self.btn_begin.clicked.connect(self._on_begin_trials)
         self.btn_next.clicked.connect(self._on_next_trial)
-        self.btn_end.clicked.connect(lambda: self.requestTransition.emit("EndTrials"))
+        self.btn_end.clicked.connect(self._on_end_trials_clicked)
         self.__sample_channels = [0,1,2,3]
         self.__reps = [0,1,2]
         self.__trial_id: int = 0
@@ -160,6 +160,10 @@ class RunTrialsPage(ExperimenterPage):
             "velocity": velocity,
             "repetition": rep,
         }
+        
+        self.get_participant_page().set_prompt(f"Please {str(self._current_trial_ctx["gesture"]).upper()} the sample \n {str(self._current_trial_ctx["velocity"]).split(".")[1]} \n \n {len(self.__pending_trials)} Trials remaining\n")
+        
+        # Send LED command!
 
         self.__trial_id += 1
         return True
@@ -203,15 +207,14 @@ class RunTrialsPage(ExperimenterPage):
             f'repetition: {context["repetition"]};"}}'
         )
 
+        
+
         self.btn_begin.setEnabled(False)
         self.btn_next.setEnabled(True)
 
-    # ---------- main action ----------
-    @QtCore.Slot()
-    def _on_next_trial(self):
-        # End the currently active trial
-        self._send_trial_end_note()
 
+    def __evaluate_next_trial(self):
+        #print("hello!")
         # If there is no next trial to load, we just ended the final trial of the block.
         if not self.__pending_trials:
             gesture_seq = self._gesture_sequence()
@@ -225,6 +228,7 @@ class RunTrialsPage(ExperimenterPage):
 
             if self.__gesture_idx < len(gesture_seq):
                 self.requestTransition.emit("GestureChange")
+                self.get_participant_page().set_prompt("Trial Block Completed! \n \n \n Get ready for the next Gesture...")
                 return
 
             self.__gesture_idx = 0
@@ -233,14 +237,29 @@ class RunTrialsPage(ExperimenterPage):
 
             if self._sample_group_idx < len(sample_group_seq):
                 self.requestTransition.emit("SampleChange")
+                self.get_participant_page().set_prompt("Trial Block Completed! \n \n \n The experimenter will switch the samples...")
             else:
                 self.requestTransition.emit("EndTrials")
+                self.get_participant_page().set_prompt("Experiment Complete! \n \n \n  you for participating :^) ")
             return
 
         # Otherwise, load the next trial and continue within the block
         ok = self._load_one_trial()
         if not ok:
             return
+
+    # ---------- main action ----------
+    @QtCore.Slot()
+    def _on_next_trial(self):
+        # End the currently active trial
+        self._send_trial_end_note()
+        self.get_participant_page().set_prompt(f"Trial Complete! \n \n \n {len(self.__pending_trials)} Trials remaining\n")
+
+        QtCore.QTimer.singleShot(1000, self.__evaluate_next_trial)
+
+    def _on_end_trials_clicked(self):
+        self.requestTransition.emit("EndTrials")
+        self.get_participant_page().set_prompt("Experiment Complete! \n \n \n  you for participating :^)")
     
     def showEvent(self, event):
         super().showEvent(event)
@@ -250,6 +269,7 @@ class RunTrialsPage(ExperimenterPage):
     def _reset_for_entry(self):
         # wipe old text + require begin again
         self.lbl_trial.setText("Ready. Press Begin trials to load the first trial.")
+        self.get_participant_page().set_prompt("Ready to begin next trials? \n")
         self.btn_next.setEnabled(False)
         self.btn_begin.setEnabled(True)
 

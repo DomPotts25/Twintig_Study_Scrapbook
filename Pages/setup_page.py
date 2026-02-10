@@ -2,6 +2,9 @@ from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
+from Tools.velocity_analyser import TrialBlockForceAnalyser
+
+import os
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -351,6 +354,18 @@ class TrialCheckPage(ExperimenterPage):
 class EndTrialsPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
-        lbl = QtWidgets.QLabel("Experiment Finished")
+        lbl = QtWidgets.QLabel("Experiment End")
         lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.add_content_widget(lbl)
+
+        btn = QtWidgets.QPushButton("Inspect force data of last block")
+        btn.clicked.connect(self._on_inspect_force_clicked)
+        self.add_content_widget(btn)
+
+    def _on_inspect_force_clicked(self):
+        print(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+        analyser.run()
+        analyser.plot_scatter_by_sample_id(title="Last block: max force per trial (fast vs slow)")
+
+

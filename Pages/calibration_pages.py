@@ -1,7 +1,7 @@
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_calibration_analyser import VelocityCalibrationAnalyser
+from Tools.velocity_analyser import VelocityCalibrationAnalyser
 
 import ximu3
 import shutil
@@ -112,7 +112,6 @@ class VelocityCalibPage(ExperimenterPage):
         self.btn_next_trial.setEnabled(self._is_calibrating)
         self.btn_stop_calib.setEnabled(self._is_calibrating)
 
-        # Optional: change button text to show progress
         if self._is_calibrating:
             gesture, velocity = self._current_condition()
             cond_num = self._condition_index + 1
