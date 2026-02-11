@@ -58,8 +58,6 @@ class RunTrialsPage(ExperimenterPage):
         self.__gesture_idx: int = 0
         self.__pending_trials: List[Tuple[int, Velocity, int]] = []  # (sample_id, velocity, repetition)
 
-        self.studyPhaseRequested.emit(StudyPhases.TRIAL)
-
         self.__forceDataLogger = None
         self.__current_trial_ctx = None  # dict or None
 
@@ -161,8 +159,8 @@ class RunTrialsPage(ExperimenterPage):
             "repetition": rep,
         }
         
-        self.get_participant_page().set_prompt(f"Please {str(self._current_trial_ctx["gesture"]).upper()} the sample \n {str(self._current_trial_ctx["velocity"]).split(".")[1]} \n \n {len(self.__pending_trials)} Trials remaining\n")
-        
+        self.get_participant_page().set_prompt(f"Please {str(self._current_trial_ctx["gesture"]).upper()} Sample {str(self._current_trial_ctx["sample_id"]+1).upper()} \n {str(self._current_trial_ctx["velocity"]).split(".")[1]} \n \n {len(self.__pending_trials)} Trials remaining\n")
+
         # Send LED command!
 
         self.__trial_id += 1
@@ -182,6 +180,7 @@ class RunTrialsPage(ExperimenterPage):
 
     @QtCore.Slot()
     def _on_begin_trials(self):
+        self.studyPhaseRequested.emit(StudyPhases.TRIAL)
         # Load the first trial of the current block, then enable Next.
         ok = self._load_one_trial()
         if not ok:
@@ -229,6 +228,7 @@ class RunTrialsPage(ExperimenterPage):
             if self.__gesture_idx < len(gesture_seq):
                 self.requestTransition.emit("GestureChange")
                 self.get_participant_page().set_prompt("Trial Block Completed! \n \n \n Get ready for the next Gesture...")
+                self.studyPhaseRequested.emit(StudyPhases.GESTURE_SWITCH)
                 return
 
             self.__gesture_idx = 0
@@ -238,9 +238,11 @@ class RunTrialsPage(ExperimenterPage):
             if self._sample_group_idx < len(sample_group_seq):
                 self.requestTransition.emit("SampleChange")
                 self.get_participant_page().set_prompt("Trial Block Completed! \n \n \n The experimenter will switch the samples...")
+                self.studyPhaseRequested.emit(StudyPhases.SAMPLE_SWITCH)
             else:
                 self.requestTransition.emit("EndTrials")
                 self.get_participant_page().set_prompt("Experiment Complete! \n \n \n  you for participating :^) ")
+                self.studyPhaseRequested.emit(StudyPhases.END_EXPERIMENT)
             return
 
         # Otherwise, load the next trial and continue within the block
@@ -258,7 +260,9 @@ class RunTrialsPage(ExperimenterPage):
         QtCore.QTimer.singleShot(1000, self.__evaluate_next_trial)
 
     def _on_end_trials_clicked(self):
+        del self.__forceDataLogger
         self.requestTransition.emit("EndTrials")
+        self.studyPhaseRequested.emit(StudyPhases.END_EXPERIMENT)
         self.get_participant_page().set_prompt("Experiment Complete! \n \n \n  you for participating :^)")
     
     def showEvent(self, event):
@@ -269,6 +273,7 @@ class RunTrialsPage(ExperimenterPage):
     def _reset_for_entry(self):
         # wipe old text + require begin again
         self.lbl_trial.setText("Ready. Press Begin trials to load the first trial.")
+        self.studyPhaseRequested.emit(StudyPhases.PRE_TRIAL)
         self.get_participant_page().set_prompt("Ready to begin next trials? \n")
         self.btn_next.setEnabled(False)
         self.btn_begin.setEnabled(True)

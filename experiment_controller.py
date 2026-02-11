@@ -245,7 +245,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         self.pageEntered.emit(name)  # if this needs to be observed elsewhere
 
         if name == "RunTrials":
-            self.set_study_phase(StudyPhases.TRIAL)
+            self.set_study_phase(StudyPhases.PRE_TRIAL)
         elif name == "StillCalib":
             self.set_study_phase(StudyPhases.SETUP)
         elif name == "Setup":
