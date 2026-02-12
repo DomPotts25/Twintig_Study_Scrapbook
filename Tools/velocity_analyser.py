@@ -152,6 +152,12 @@ class ForceTrialResult:
     end_ts_us: int
     n_samples: int
     max_force: float
+    min_force: float
+    rep: int        
+
+    # Raw Data               
+    t_us: np.ndarray               
+    force: np.ndarray              
 
 class TrialBlockForceAnalyser:
    
@@ -277,6 +283,8 @@ class TrialBlockForceAnalyser:
         results: List[ForceTrialResult] = []
         previous_end_timestamp = int(timestamp.min()) - 1
 
+        rep_counter: Dict[Tuple[str, int, str], int] = {}
+
         for _, row in ends.iterrows():
             end_timestamp = int(row["Timestamp (us)"])
             trial_index, gesture, sample_id, velocity = self.__parse_marker(row["String"])
@@ -293,7 +301,14 @@ class TrialBlockForceAnalyser:
                 )
 
             mask = (timestamp >= start_timestamp) & (timestamp <= end_timestamp)
+            seg_t = timestamp[mask]
             seg_force = serial_df.loc[mask, ch_name].to_numpy()
+
+            rep_key = (gesture, sample_id, velocity)
+            if rep_key not in rep_counter:
+                rep_counter[rep_key] = 0
+            rep = rep_counter[rep_key]
+            rep_counter[rep_key] += 1
 
             results.append(
                 ForceTrialResult(
@@ -305,6 +320,10 @@ class TrialBlockForceAnalyser:
                     end_ts_us=int(end_timestamp),
                     n_samples=int(seg_force.size),
                     max_force=float(np.nanmax(seg_force)) if seg_force.size else float("nan"),
+                    min_force=float(np.nanmin(seg_force)) if seg_force.size else float("nan"),
+                    rep=rep,
+                    t_us=np.asarray(seg_t, dtype=np.int64),
+                    force=np.asarray(seg_force, dtype=float),
                 )
             )
             previous_end_timestamp = end_timestamp
@@ -333,17 +352,97 @@ class TrialBlockForceAnalyser:
 
         fig, ax = plt.subplots(figsize=(10, 5))
 
-        ax.scatter(slow_x, slow["max_force"], alpha=0.6, label="slow")
-        ax.scatter(fast_x, fast["max_force"], alpha=0.6, label="fast")
+        ax.scatter(slow_x, slow["min_force"], alpha=0.6, label="slow")
+        ax.scatter(fast_x, fast["min_force"], alpha=0.6, label="fast")
 
         ax.set_xticks(list(x_map.values()))
         ax.set_xticklabels([str(s) for s in sample_ids])
         ax.set_xlabel("sample_id")
-        ax.set_ylabel("Max force (per trial)")
-        ax.set_title(title or "Max force per trial by sample_id (fast vs slow)")
+        ax.set_ylabel("Min force (per trial)")
+        ax.set_title(title or "Min force per trial by sample_id (fast vs slow)")
         ax.grid(axis="y", alpha=0.3)
         ax.legend()
 
+        plt.tight_layout()
+        plt.show()
+
+    
+    def plot_raw_trials_side_by_side(self) -> None:
+        trials = self.get_trials()
+        if not trials:
+            raise RuntimeError("No trials loaded. Call run() first.")
+
+        # Index trials by (gesture, sample_id, rep, velocity)
+        by_key = {}
+        for t in trials:
+            vel = t.velocity.strip().lower()
+            by_key[(t.gesture, t.sample_id, t.rep, vel)] = t
+
+        # Build paired list (slow, fast) for same gesture/sample_id/rep
+        pairs = []
+        keys = sorted({(g, sid, rep) for (g, sid, rep, _vel) in by_key.keys()})
+        for g, sid, rep in keys:
+            slow = by_key.get((g, sid, rep, "velocity.slow"))
+            fast = by_key.get((g, sid, rep, "velocity.fast"))
+            # keep even if one is missing (still useful)
+            pairs.append((g, sid, rep, slow, fast))
+
+        if not pairs:
+            raise RuntimeError("No trial pairs found.")
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
+        axL, axR = axes
+        idx = 0
+
+        def _plot_one(ax, trial, title):
+            ax.clear()
+            ax.set_title(title)
+            ax.set_xlabel("Time (ms)")
+            ax.grid(True, alpha=0.3)
+
+            if trial is None or trial.n_samples == 0:
+                ax.text(0.5, 0.5, "Missing / empty", ha="center", va="center", transform=ax.transAxes)
+                return
+
+            t_ms = (trial.t_us - trial.t_us[0]) / 1000.0
+            ax.plot(t_ms, trial.force)
+            ax.set_ylabel("Force (raw)")
+
+        def redraw():
+            nonlocal idx
+            g, sid, rep, slow, fast = pairs[idx]
+
+            fig.suptitle(f"{idx+1}/{len(pairs)}  |  gesture={g}  sample_id={sid}  rep={rep}")
+
+            _plot_one(axL, slow, "slow")
+            _plot_one(axR, fast, "fast")
+
+            # Optional: match y-lims for readability
+            ys = []
+            for t in (slow, fast):
+                if t is not None and t.n_samples:
+                    ys.append(np.nanmin(t.force))
+                    ys.append(np.nanmax(t.force))
+            if ys:
+                lo, hi = float(np.min(ys)), float(np.max(ys))
+                pad = 0.05 * (hi - lo) if hi > lo else 1.0
+                axL.set_ylim(lo - pad, hi + pad)
+
+            fig.canvas.draw_idle()
+
+        def on_key(event):
+            nonlocal idx
+            if event.key in ("right", "n"):
+                idx = (idx + 1) % len(pairs)
+                redraw()
+            elif event.key in ("left", "p"):
+                idx = (idx - 1) % len(pairs)
+                redraw()
+            elif event.key in ("escape", "q"):
+                plt.close(fig)
+
+        fig.canvas.mpl_connect("key_press_event", on_key)
+        redraw()
         plt.tight_layout()
         plt.show()
 
@@ -352,55 +451,8 @@ def main():
         r"C:\Users\dm-potts-admin\Documents\Postdoc\UWE\Outside_Interactions\Object_Characterisation_Study\Study_Program\Twintig_Study_Scrapbook\Logged_Data\Trial_Force_Data\Tap_Pads_Data"
     )   
     analyser.run()
-    analyser.plot_scatter_by_sample_id("Last block: max force per trial (fast vs slow)")
-    # analyser = VelocityCalibrationAnalyser(
-    #     data_dir=r"C:\Users\dm-potts-admin\Documents\Postdoc\UWE\Outside_Interactions\Object_Characterisation_Study\Study_Program\Twintig_Study_Scrapbook\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")
-
-    # analyser.run()
-
-    # summary = analyser.get_summary()
-    # print(summary)
-
-    # data_by_condition = analyser.get_max_force_by_condition()
-    # # print(data_by_condition[("tap", "slow")])  # e.g. [0.64, 0.54, ...]
-    # # print(np.mean(data_by_condition[("tap", "slow")]))
-
-    # # print(data_by_condition[("tap", "fast")])  # e.g. [0.64, 0.54, ...]
-    # # print(np.mean(data_by_condition[("tap", "fast")]))
-
-    # print(data_by_condition[("pat", "fast")])
-    # print("-----------------")
-    # print(data_by_condition[("pat", "slow")])
-
-    # labels = []
-    # means = []
-    # stds = []
-
-    # for (gesture, velocity), values in data_by_condition.items():
-    #     values = np.asarray(values, dtype=float)
-
-    #     labels.append(f"{gesture} | {velocity}")
-    #     means.append(np.nanmean(values))
-    #     stds.append(np.nanstd(values))
-
-    # means = np.array(means)
-    # stds = np.array(stds)
-
-    # # Plot
-    # fig, ax = plt.subplots(figsize=(10, 5))
-
-    # x = np.arange(len(labels))
-    # ax.bar(x, means, yerr=stds, capsize=5)
-
-    # ax.set_xticks(x)
-    # ax.set_xticklabels(labels, rotation=45, ha="right")
-    # ax.set_ylabel("Max Force")
-    # ax.set_title("Mean ± SD of Max Force by Condition")
-
-    # ax.grid(axis="y", alpha=0.3)
-
-    # plt.tight_layout()
-    # plt.show()
+    analyser.plot_scatter_by_sample_id("Last block: min force per trial (fast vs slow)")
+    analyser.plot_raw_trials_side_by_side()
 
 if __name__ == "__main__":
     main()

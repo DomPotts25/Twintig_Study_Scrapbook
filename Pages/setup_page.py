@@ -358,14 +358,27 @@ class EndTrialsPage(ExperimenterPage):
         lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.add_content_widget(lbl)
 
-        btn = QtWidgets.QPushButton("Inspect force data of last block")
-        btn.clicked.connect(self._on_inspect_force_clicked)
-        self.add_content_widget(btn)
+        btn_inspect_all_trials = QtWidgets.QPushButton("Inspect force data of last block")
+        btn_inspect_all_trials.clicked.connect(self._on_inspect_max_force_clicked)
+        self.add_content_widget(btn_inspect_all_trials)
 
-    def _on_inspect_force_clicked(self):
-        print(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
-        analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
-        analyser.run()
-        analyser.plot_scatter_by_sample_id(title="Last block: max force per trial (fast vs slow)")
+        btn_inspect_trial_by_trial = QtWidgets.QPushButton("Trial by Trial Force Data")
+        btn_inspect_trial_by_trial.clicked.connect(self._on_inspect_trial_by_trial)
+        self.add_content_widget(btn_inspect_trial_by_trial)
+
+        self.__trial_analyser : TrialBlockForceAnalyser | None = None
+
+    def check_analyser(self)-> None:
+        if(self.__trial_analyser is None):
+            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+            self.__trial_analyser.run()
+
+    def _on_inspect_max_force_clicked(self):
+        self.check_analyser()
+        self.__trial_analyser.plot_scatter_by_sample_id(title="Last block: min force per trial (fast vs slow)")
+
+    def _on_inspect_trial_by_trial(self):
+        self.check_analyser()
+        self.__trial_analyser.plot_raw_trials_side_by_side()
 
 

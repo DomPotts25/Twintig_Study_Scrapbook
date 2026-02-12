@@ -8,7 +8,7 @@ class Velocity(str, Enum):
 
 class SampleGroup(str, Enum):
     SHAPE = "shape"
-    STIFF_SOFT = "stiff_soft"
+    #STIFF_SOFT = "stiff_soft"
     # STIFF_HARD = "stiff_hard"
     # TEXTURE = "texture"
     # HOLLOWNESS = "hollowness"
@@ -38,8 +38,8 @@ class Gestures(str, Enum):
     TAP = "tap"
     PAT = "pat"
     # PINCH = "pinch"
-    # STROKE = "stroke"
     # GRASP = "grasp"
+    # STROKE = "stroke"
 
 
 class StudyPhases(str, Enum):
