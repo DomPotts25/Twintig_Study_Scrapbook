@@ -68,7 +68,7 @@ class StillCalibPage(ExperimenterPage):
 # TODO: Add btn that allows to load previously collected Vel_Calib Data
 class VelocityCalibPage(ExperimenterPage):
     
-    TRIALS_PER_CONDITION = 2
+    TRIALS_PER_CONDITION = 10
     
     velocityCalibrationDone = QtCore.Signal(object)
     calibrationDone = QtCore.Signal(str)  # emits the page key
