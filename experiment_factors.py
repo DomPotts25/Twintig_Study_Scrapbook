@@ -3,6 +3,7 @@ from enum import Enum
 
 class Velocity(str, Enum):
     SLOW = "slow"
+    NORMAL = "normal"
     FAST = "fast"
 
 
