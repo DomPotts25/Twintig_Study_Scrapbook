@@ -1,10 +1,15 @@
 """This file acts as the main module for this script."""
-import adsk.core, adsk.fusion, traceback
+
 import csv
 import os
+import traceback
+
+import adsk.core
+import adsk.fusion
 
 app = adsk.core.Application.get()
-ui  = app.userInterface
+ui = app.userInterface
+
 
 def run(context):
     ui = None
@@ -16,28 +21,26 @@ def run(context):
         rootComp = design.rootComponent
 
         # File paths
-        csv_path = 'C:/Users/dm-potts-admin/Documents/Postdoc/UWE/Outside_Interactions/TwinTig_Hardware/Ring_Design/Dom/ring_output_Dom.csv'
-        output_folder = 'C:/Users/dm-potts-admin/Documents/Postdoc/UWE/Outside_Interactions/TwinTig_Hardware/Ring_Design/Dom/Models_v4/'
+        csv_path = "C:/Users/dm-potts-admin/Documents/Postdoc/UWE/Outside_Interactions/TwinTig_Hardware/Ring_Design/Dom/ring_output_Dom.csv"
+        output_folder = "C:/Users/dm-potts-admin/Documents/Postdoc/UWE/Outside_Interactions/TwinTig_Hardware/Ring_Design/Dom/Models_v4/"
 
         # Ensure output folder exists
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
         # Parameters to read
-        param_columns = [
-            'Ring_Width', 'Ring_Height'
-        ]
+        param_columns = ["Ring_Width", "Ring_Height"]
 
         export_mgr = design.exportManager
 
         # Read CSV
-        with open(csv_path, newline='') as csvfile:
+        with open(csv_path, newline="") as csvfile:
             reader = csv.DictReader(csvfile)
             count = 0
             for row in reader:
                 count += 1
 
-                ring_name = row.get('Ring_Name', '').strip()
+                ring_name = row.get("Ring_Name", "").strip()
                 if not ring_name:
                     ui.messageBox(f"Skipping row {count}: No Ring_Name found.")
                     continue
@@ -50,7 +53,7 @@ def run(context):
 
                     val = row[param_name].strip()
                     try:
-                        if param_name == 'Ring_Width':
+                        if param_name == "Ring_Width":
                             val = str(float(val) + 0.0001)
 
                         param = design.userParameters.itemByName(param_name)
@@ -66,25 +69,24 @@ def run(context):
                     sketches = rootComp.sketches
 
                     # Width Text
-                    width_sketch = sketches.itemByName('Width_Text')
+                    width_sketch = sketches.itemByName("Width_Text")
                     if width_sketch:
                         for sketch_text in width_sketch.sketchTexts:
-                            sketch_text.text = row.get('Ring_Width_Name', '')
+                            sketch_text.text = row.get("Ring_Width_Name", "")
 
                     # Height Text
-                    height_sketch = sketches.itemByName('Height_Text')
+                    height_sketch = sketches.itemByName("Height_Text")
                     if height_sketch:
                         for sketch_text in height_sketch.sketchTexts:
-                            sketch_text.text = row.get('Ring_Height_Name', '')
+                            sketch_text.text = row.get("Ring_Height_Name", "")
 
                 except Exception as e:
                     ui.messageBox(f"Error updating sketch texts for row {count}: {str(e)}")
 
-
                 design.computeAll()
 
                 # Export STEP
-                step_path = os.path.join(output_folder, f'{ring_name}.step')
+                step_path = os.path.join(output_folder, f"{ring_name}.step")
                 step_options = export_mgr.createSTEPExportOptions(step_path, rootComp)
                 export_mgr.execute(step_options)
 
@@ -97,4 +99,4 @@ def run(context):
 
     except Exception as e:
         if ui:
-            ui.messageBox('Script failed:\n{}'.format(traceback.format_exc()))
+            ui.messageBox("Script failed:\n{}".format(traceback.format_exc()))

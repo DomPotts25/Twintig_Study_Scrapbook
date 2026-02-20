@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import fnmatch
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-import fnmatch
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
+
 
 @dataclass(frozen=True)
 class VelocityCalibrationTrialResult:
@@ -24,32 +25,32 @@ class VelocityCalibrationTrialResult:
     contact_duration_us: Optional[float] = None
     peak_slope: Optional[float] = None
 
+
 class VelocityCalibrationAnalyser:
-
     def __init__(
-            self,
-            data_dir: str | Path,
-            folder_prefix: str = "Twintig Tap Pads",
-            notification_filename: str = "Notification.csv",
-            data_filename: str = "SerialAccessory.csv",
-            force_channel_index: int = 1,  # CH1 = first channel after timestamp
-            begin_detection_enabled: bool = True,
-            begin_highpass_threshold: float = -0.02,
-            begin_holdoff_ms: float = 250.0,):
+        self,
+        data_dir: str | Path,
+        folder_prefix: str = "Twintig Tap Pads",
+        notification_filename: str = "Notification.csv",
+        data_filename: str = "SerialAccessory.csv",
+        force_channel_index: int = 1,  # CH1 = first channel after timestamp
+        begin_detection_enabled: bool = True,
+        begin_highpass_threshold: float = -0.02,
+        begin_holdoff_ms: float = 250.0,
+    ):
+        self.data_dir = Path(data_dir)
+        self.folder_prefix = folder_prefix
+        self.notification_filename = notification_filename
+        self.data_filename = data_filename
+        self.force_channel_index = force_channel_index
 
-            self.data_dir = Path(data_dir)
-            self.folder_prefix = folder_prefix
-            self.notification_filename = notification_filename
-            self.data_filename = data_filename
-            self.force_channel_index = force_channel_index
+        self.begin_detection_enabled = begin_detection_enabled
+        self.begin_highpass_threshold = begin_highpass_threshold
+        self.begin_holdoff_ms = begin_holdoff_ms
 
-            self.begin_detection_enabled = begin_detection_enabled
-            self.begin_highpass_threshold = begin_highpass_threshold
-            self.begin_holdoff_ms = begin_holdoff_ms
-
-            self._folder: Optional[Path] = None
-            self._trials: List[VelocityCalibrationTrialResult] = []
-            self._summary: Optional[pd.DataFrame] = None
+        self._folder: Optional[Path] = None
+        self._trials: List[VelocityCalibrationTrialResult] = []
+        self._summary: Optional[pd.DataFrame] = None
 
     def run(self) -> None:
         folder = self.__find_data_folder()
@@ -66,30 +67,30 @@ class VelocityCalibrationAnalyser:
     def get_summary(self) -> pd.DataFrame:
         return self._summary if self._summary is not None else pd.DataFrame()
 
-
     # need to change experiment controller to not use this, but 'get_metrics_by_condition' instead
     def get_max_force_by_condition(self) -> Dict[Tuple[str, str], List[float]]:
         out: Dict[Tuple[str, str], List[float]] = {}
         for t in self._trials:
             out.setdefault((t.gesture, t.velocity), []).append(t.max_force)
         return out
-    
+
     def get_metrics_by_condition(self) -> Dict[Tuple[str, str], List[dict]]:
         result: Dict[Tuple[str, str], List[dict]] = {}
         for t in self._trials:
-            result.setdefault((t.gesture, t.velocity), []).append({
-                "trial_index": t.trial_index,
-                "min_force": t.min_force,
-                "max_force": t.max_force,
-                "rise_time_us": t.rise_time_us,
-                "contact_duration_us": t.contact_duration_us,
-                "peak_slope": t.peak_slope,
-            })
+            result.setdefault((t.gesture, t.velocity), []).append(
+                {
+                    "trial_index": t.trial_index,
+                    "min_force": t.min_force,
+                    "max_force": t.max_force,
+                    "rise_time_us": t.rise_time_us,
+                    "contact_duration_us": t.contact_duration_us,
+                    "peak_slope": t.peak_slope,
+                }
+            )
         return result
 
     def get_folder(self) -> Optional[Path]:
         return self._folder
-
 
     def __find_data_folder(self) -> Path:
         return next(p for p in self.data_dir.iterdir() if p.is_dir() and p.name.startswith(self.folder_prefix))
@@ -142,7 +143,7 @@ class VelocityCalibrationAnalyser:
             mask = (timestamp_us > previous_end_timestamp) & (timestamp_us <= end_timestamp)
             seg_ts_us = timestamp_us[mask]
             seg_force = force[mask]
-            
+
             if self.begin_detection_enabled and seg_force.size:
                 begin_index = self.__detect_begin_index_highpass(seg_ts_us, seg_force)
                 if begin_index is not None:
@@ -161,14 +162,14 @@ class VelocityCalibrationAnalyser:
 
             rise_time_us = self.__compute_rise_time_inverted(relative_time_us, seg_force) if seg_force.size else None
             contact_duration_us = self.__compute_contact_duration_inverted(relative_time_us, seg_force) if seg_force.size else None
-            peak_slope = self.__compute_peak_slope_inverted(relative_time_us, seg_force) if seg_force.size else None            
+            peak_slope = self.__compute_peak_slope_inverted(relative_time_us, seg_force) if seg_force.size else None
 
             results.append(
                 VelocityCalibrationTrialResult(
                     trial_index=trial_index,
                     gesture=gesture,
                     velocity=velocity,
-                    #start_ts_us=int(previous_end_timestamp + 1),
+                    # start_ts_us=int(previous_end_timestamp + 1),
                     start_ts_us=int(seg_ts_us[0]),
                     end_ts_us=end_timestamp,
                     n_samples=int(seg_force.size),
@@ -183,11 +184,7 @@ class VelocityCalibrationAnalyser:
 
         return results
 
-    def __compute_summary(
-        self,
-        trials: List[VelocityCalibrationTrialResult]
-    ) -> pd.DataFrame:
-
+    def __compute_summary(self, trials: List[VelocityCalibrationTrialResult]) -> pd.DataFrame:
         df = pd.DataFrame([t.__dict__ for t in trials])
 
         if df.empty:
@@ -197,7 +194,7 @@ class VelocityCalibrationAnalyser:
         numeric_columns = [
             "max_force",
             "min_force",
-            "rise_time_us", 
+            "rise_time_us",
             "contact_duration_us",
             "peak_slope",
         ]
@@ -211,27 +208,23 @@ class VelocityCalibrationAnalyser:
 
         summary = grouped.agg(
             trial_count=("trial_index", "count"),
-
             # Force metrics
             max_force_mean=("max_force", "mean"),
             max_force_std=("max_force", "std"),
             min_force_mean=("min_force", "mean"),
             min_force_std=("min_force", "std"),
-
             # Rise time (microseconds)
             rise_time_mean_us=("rise_time_us", "mean"),
             rise_time_std_us=("rise_time_us", "std"),
             rise_time_median_us=("rise_time_us", "median"),
             rise_time_min_us=("rise_time_us", "min"),
             rise_time_max_us=("rise_time_us", "max"),
-
             # Contact duration (microseconds)
             contact_duration_mean_us=("contact_duration_us", "mean"),
             contact_duration_std_us=("contact_duration_us", "std"),
             contact_duration_median_us=("contact_duration_us", "median"),
             contact_duration_min_us=("contact_duration_us", "min"),
             contact_duration_max_us=("contact_duration_us", "max"),
-
             # Peak slope (force per microsecond)
             peak_slope_mean=("peak_slope", "mean"),
             peak_slope_std=("peak_slope", "std"),
@@ -241,12 +234,12 @@ class VelocityCalibrationAnalyser:
         ).reset_index()
 
         return summary
-    
+
     def __detect_begin_index_highpass(
         self,
         timestamps_us: np.ndarray,
-        force_values: np.ndarray,) -> Optional[int]:
-
+        force_values: np.ndarray,
+    ) -> Optional[int]:
         if timestamps_us.size < 3 or force_values.size < 3:
             return None
 
@@ -277,25 +270,22 @@ class VelocityCalibrationAnalyser:
 
         return begin_index
         pass
-    
+
     def __baseline(self, force_values: np.ndarray) -> Optional[float]:
         if force_values.size < 10:
             return None
-        
+
         first_10_percent = max(5, int(0.10 * force_values.size))  # first 10% as baseline
         baseline = float(np.nanmedian(force_values[:first_10_percent]))
 
         return baseline if np.isfinite(baseline) else None
-    
-    # expects baseline to be high, and press to be lower. 
+
+    # expects baseline to be high, and press to be lower.
     def __compute_rise_time_inverted(self, timestamps_us_relative_to_trial_start: np.ndarray, force_values_raw: np.ndarray) -> Optional[float]:
         if timestamps_us_relative_to_trial_start.size < 10 or force_values_raw.size < 10:
             return None
 
-        number_of_baseline_samples = min(
-            force_values_raw.size,
-            max(5, int(0.10 * force_values_raw.size))
-        )
+        number_of_baseline_samples = min(force_values_raw.size, max(5, int(0.10 * force_values_raw.size)))
         baseline_force_estimate = float(np.nanmedian(force_values_raw[:number_of_baseline_samples]))
         trough_force_value = float(np.nanmin(force_values_raw))
 
@@ -341,12 +331,11 @@ class VelocityCalibrationAnalyser:
             return None
 
         return float(time_at_90_percent_us - time_at_10_percent_us)
-    
 
     def __compute_contact_duration_inverted(self, timestamps: np.ndarray, force_values_raw: np.ndarray, press_depth_threshold: float = 0.05) -> Optional[float]:
         if timestamps.size < 10 or force_values_raw.size < 10:
             return None
-        
+
         baseline_force_value = self.__baseline(force_values_raw)
         trough_force_value = float(np.nanmin(force_values_raw))
 
@@ -355,20 +344,20 @@ class VelocityCalibrationAnalyser:
         normalized_press_depth = (baseline_force_value - force_values_raw) / press_amplitude
         index_contact_active = np.where(normalized_press_depth >= press_depth_threshold)[0]
 
-        if(index_contact_active.size < 2):
+        if index_contact_active.size < 2:
             return None
-        
+
         first_contact_index = int(index_contact_active[0])
         last_contact_index = int(index_contact_active[-1])
 
-        contact_duration_seconds = (timestamps[last_contact_index] - timestamps[first_contact_index])
-        
+        contact_duration_seconds = timestamps[last_contact_index] - timestamps[first_contact_index]
+
         return float(contact_duration_seconds)
 
     def __compute_peak_slope_inverted(self, timestamps: np.ndarray, force_values_raw: np.ndarray) -> Optional[float]:
         if timestamps.size < 5 or force_values_raw.size < 5:
             return None
-        
+
         delta_time = np.diff(timestamps)
         delta_force = np.diff(force_values_raw)
 
@@ -376,25 +365,25 @@ class VelocityCalibrationAnalyser:
 
         if not np.any(valid_time_steps_mask):
             return None
-        
-        slopes_force_per_us = (delta_force[valid_time_steps_mask] / delta_time[valid_time_steps_mask])
+
+        slopes_force_per_us = delta_force[valid_time_steps_mask] / delta_time[valid_time_steps_mask]
 
         if slopes_force_per_us.size == 0:
             return None
-        
+
         most_negative_slope = float(np.nanmin(slopes_force_per_us))
 
         peak_downward_slope_magnitude = abs(most_negative_slope)
-        
+
         return float(peak_downward_slope_magnitude)
-    
+
     def _plot_summary_metric(
         self,
         mean_column: str,
         std_column: str,
         y_label: str,
         title: str,
-        velocity_order=("slow", "normal", "fast"), # added NORMAL speed
+        velocity_order=("slow", "normal", "fast"),  # added NORMAL speed
     ):
         if self._summary is None or self._summary.empty:
             raise ValueError("Summary data not available. Run analyser first.")
@@ -410,12 +399,8 @@ class VelocityCalibrationAnalyser:
         for i, velocity in enumerate(velocity_order):
             df_vel = df[df["velocity"] == velocity].set_index("gesture")
 
-            means = np.array(
-                [df_vel.loc[g, mean_column] if g in df_vel.index else np.nan for g in gestures]
-            )
-            stds = np.array(
-                [df_vel.loc[g, std_column] if g in df_vel.index else np.nan for g in gestures]
-            )
+            means = np.array([df_vel.loc[g, mean_column] if g in df_vel.index else np.nan for g in gestures])
+            stds = np.array([df_vel.loc[g, std_column] if g in df_vel.index else np.nan for g in gestures])
 
             offset = (i - 0.5) * bar_width
             ax.bar(
@@ -461,8 +446,10 @@ class VelocityCalibrationAnalyser:
             title="Peak Slope by Gesture and Velocity",
         )
 
+
 ############################################################################
-    
+
+
 @dataclass(frozen=True)
 class ForceTrialResult:
     trial_index: int
@@ -474,14 +461,14 @@ class ForceTrialResult:
     n_samples: int
     max_force: float
     min_force: float
-    rep: int        
+    rep: int
 
-    # Raw Data               
-    t_us: np.ndarray               
-    force: np.ndarray              
+    # Raw Data
+    t_us: np.ndarray
+    force: np.ndarray
+
 
 class TrialBlockForceAnalyser:
-   
     def __init__(
         self,
         data_dir: str | Path,
@@ -513,7 +500,7 @@ class TrialBlockForceAnalyser:
 
     def get_folder(self) -> Optional[Path]:
         return self._folder
-    
+
     def get_trials(self) -> List[ForceTrialResult]:
         return self._trials
 
@@ -522,11 +509,8 @@ class TrialBlockForceAnalyser:
 
     def __find_data_folder(self) -> Path:
         # Same style as your VelocityCalibrationAnalyser
-        return next(
-            p for p in self.data_dir.iterdir()
-            if p.is_dir() and p.name.startswith(self.folder_prefix)
-        )
-    
+        return next(p for p in self.data_dir.iterdir() if p.is_dir() and p.name.startswith(self.folder_prefix))
+
     def __load_notification(self, folder: Path) -> pd.DataFrame:
         df = pd.read_csv(folder / self.notification_filename)
         df["Timestamp (us)"] = df["Timestamp (us)"].astype(np.int64)
@@ -559,7 +543,7 @@ class TrialBlockForceAnalyser:
         for c in colnames[1:]:
             df[c] = pd.to_numeric(df[c], errors="coerce")
         return df
-    
+
     def __is_trial_begin_marker(self, s: str) -> bool:
         return fnmatch.fnmatch(s.strip(), "TRIAL * BEGIN; gesture: *; sample_id: *; velocity: *")
 
@@ -581,7 +565,7 @@ class TrialBlockForceAnalyser:
         sample_id = int(get_kv("sample_id"))
         velocity = get_kv("velocity").lower()
         return trial_index, gesture, sample_id, velocity
-    
+
     def __segment_trials(self, notification_df: pd.DataFrame, serial_df: pd.DataFrame) -> List[ForceTrialResult]:
         notification_df = notification_df.sort_values("Timestamp (us)").reset_index(drop=True)
 
@@ -616,10 +600,7 @@ class TrialBlockForceAnalyser:
 
             ch_name = f"CH{sample_id}"
             if ch_name not in serial_df.columns:
-                raise ValueError(
-                    f"sample_id={sample_id} refers to missing column {ch_name}. "
-                    f"Available: {available_channels}"
-                )
+                raise ValueError(f"sample_id={sample_id} refers to missing column {ch_name}. Available: {available_channels}")
 
             mask = (timestamp >= start_timestamp) & (timestamp <= end_timestamp)
             seg_t = timestamp[mask]
@@ -687,7 +668,6 @@ class TrialBlockForceAnalyser:
         plt.tight_layout()
         plt.show()
 
-    
     def plot_raw_trials_side_by_side(self) -> None:
         trials = self.get_trials()
         if not trials:
@@ -733,7 +713,7 @@ class TrialBlockForceAnalyser:
             nonlocal idx
             g, sid, rep, slow, fast = pairs[idx]
 
-            fig.suptitle(f"{idx+1}/{len(pairs)}  |  gesture={g}  sample_id={sid}  rep={rep}")
+            fig.suptitle(f"{idx + 1}/{len(pairs)}  |  gesture={g}  sample_id={sid}  rep={rep}")
 
             _plot_one(axL, slow, "slow")
             _plot_one(axR, fast, "fast")
@@ -767,10 +747,11 @@ class TrialBlockForceAnalyser:
         plt.tight_layout()
         plt.show()
 
+
 def main():
     # analyser = TrialBlockForceAnalyser(
     #     r"C:\Users\dm-potts-admin\Documents\Postdoc\UWE\Outside_Interactions\Object_Characterisation_Study\Study_Program\Twintig_Study_Scrapbook\Logged_Data\Trial_Force_Data\Tap_Pads_Data"
-    # )   
+    # )
     # analyser.run()
     # analyser.plot_scatter_by_sample_id("Last block: min force per trial (fast vs slow)")
     # analyser.plot_raw_trials_side_by_side()
@@ -788,9 +769,10 @@ def main():
     print(df["rise_time_mean_us"])
     print("rise time sd")
     print(df["rise_time_std_us"])
-    print(df[(df.gesture=="pat") & (df.velocity=="fast")]["rise_time_mean_us"].unique())
+    print(df[(df.gesture == "pat") & (df.velocity == "fast")]["rise_time_mean_us"].unique())
 
     plt.show()
+
 
 if __name__ == "__main__":
     main()

@@ -63,7 +63,7 @@ imu_connections = [ximu3.Connection(c) for c in configs]
 
 for imu_connection in imu_connections:
     imu_connection.open()
-    
+
 # Check if logged data already exists
 destination = os.path.dirname(os.path.abspath(__file__))
 name = "Logged Data"
@@ -83,4 +83,3 @@ send_timestamp(carpus_connection)
 
 # Wait for user to stop logging
 input("Press Enter to stop logging")
-

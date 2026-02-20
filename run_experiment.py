@@ -8,6 +8,7 @@ import participant_page
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
     experimenter_window = experiment_controller.ExperimenterWindow()
@@ -23,16 +24,13 @@ def main():
         g = screens[0].availableGeometry()
         half = g.width() // 2
         participant_window.setGeometry(g.x(), g.y(), half, g.height())
-        experimenter_window.setGeometry(
-            g.x() + half, g.y(), g.width() - half, g.height()
-        )
+        experimenter_window.setGeometry(g.x() + half, g.y(), g.width() - half, g.height())
 
     experimenter_window.showMaximized()
     participant_window.showFullScreen()
 
-    
-
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

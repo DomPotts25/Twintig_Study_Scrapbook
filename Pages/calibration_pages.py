@@ -1,14 +1,14 @@
-from Pages.experimenter_page import ExperimenterPage
-from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
-from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_analyser import VelocityCalibrationAnalyser
-
-import ximu3
-import shutil
 import os
+import shutil
 import time
 
 import numpy as np
+import ximu3
+from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
+
+from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
+from Pages.experimenter_page import ExperimenterPage
+from Tools.velocity_analyser import VelocityCalibrationAnalyser
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -46,30 +46,25 @@ class StillCalibPage(ExperimenterPage):
 
     @QtCore.Slot()
     def _run_calibration(self):
-        
         ### Placeholder "work": disable button, show status, then finish after 1.2s
 
         self.run_btn.setEnabled(False)
         self.log_bus.log("Running still calibration…")
-        self.studyPhaseRequested.emit(
-            StudyPhases.STILL_CALIBRATION
-        ) 
-        
+        self.studyPhaseRequested.emit(StudyPhases.STILL_CALIBRATION)
+
         QtCore.QTimer.singleShot(1200, self._finish_calibration)
 
     def _finish_calibration(self):
         self.log_bus.log("Still calibration complete.")
         self.run_btn.setEnabled(True)
-        self.studyPhaseRequested.emit(
-            StudyPhases.SETUP
-        ) 
+        self.studyPhaseRequested.emit(StudyPhases.SETUP)
         self.calibrationDone.emit("StillCalib")  # key matches Setup’s map
+
 
 # TODO: Add btn that allows to load previously collected Vel_Calib Data
 class VelocityCalibPage(ExperimenterPage):
-    
     TRIALS_PER_CONDITION = 10
-    
+
     velocityCalibrationDone = QtCore.Signal(object)
     calibrationDone = QtCore.Signal(str)  # emits the page key
 
@@ -78,7 +73,7 @@ class VelocityCalibPage(ExperimenterPage):
         self._is_calibrating = False
         self.__velocityCalDataLogger = None
         self.__NAME = "velocityCal"
-        
+
         self._conditions = [(g, v) for g in Gestures for v in Velocity]
         self._condition_index = 0
         self._trial_in_condition = 0
@@ -95,7 +90,7 @@ class VelocityCalibPage(ExperimenterPage):
         self.btn_next_trial.clicked.connect(self.__on_next_trial_clicked)
         self.btn_stop_calib.clicked.connect(self._on_stop_velocity_cal)
 
-        ctrl_row.addWidget(self.btn_start_calib) 
+        ctrl_row.addWidget(self.btn_start_calib)
         ctrl_row.addWidget(self.btn_next_trial)
         ctrl_row.addWidget(self.btn_stop_calib)
         ctrl_row.setAlignment(QtCore.Qt.AlignCenter)
@@ -103,7 +98,7 @@ class VelocityCalibPage(ExperimenterPage):
         self.add_content_widget(wrap)
 
         self._update_ui_state()
-    
+
     def _current_condition(self):
         return self._conditions[self._condition_index]
 
@@ -117,23 +112,17 @@ class VelocityCalibPage(ExperimenterPage):
             cond_num = self._condition_index + 1
             cond_total = len(self._conditions)
             trial_num = self._trial_in_condition + 1
-            self.btn_next_trial.setText(
-                f"Next Trial (Cond {cond_num}/{cond_total}: {gesture.value}-{velocity.value}, "
-                f"Trial {trial_num}/{self.TRIALS_PER_CONDITION})"
-            )
+            self.btn_next_trial.setText(f"Next Trial (Cond {cond_num}/{cond_total}: {gesture.value}-{velocity.value}, Trial {trial_num}/{self.TRIALS_PER_CONDITION})")
             self.get_participant_page().set_prompt(f"Please {gesture.value.capitalize()} the sample {velocity.value.capitalize()} - Trial {trial_num}/{self.TRIALS_PER_CONDITION}\n")
         else:
             self.btn_next_trial.setText("Next Velocity Trial")
 
-
     def __on_start_calib_clicked(self) -> None:
-        if not self._twintig_interface.is_open:            
+        if not self._twintig_interface.is_open:
             self.log_bus.log("[vel_Cal]: Please connect devices and insert samples")
             return
-        
-        self.studyPhaseRequested.emit(
-            StudyPhases.VELOCITY_CALIBRATION
-        )
+
+        self.studyPhaseRequested.emit(StudyPhases.VELOCITY_CALIBRATION)
 
         self._is_calibrating = True
         self._condition_index = 0
@@ -145,11 +134,7 @@ class VelocityCalibPage(ExperimenterPage):
         except Exception as e:
             print(e)
 
-        self.__velocityCalDataLogger = ximu3.DataLogger(
-            os.path.join(os.getcwd(), "Logged_Data", "Velocity_Calibration_Force_Data"),
-            self.__NAME,
-            self._twintig_interface.get_tap_pads_connection_as_list()
-        )
+        self.__velocityCalDataLogger = ximu3.DataLogger(os.path.join(os.getcwd(), "Logged_Data", "Velocity_Calibration_Force_Data"), self.__NAME, self._twintig_interface.get_tap_pads_connection_as_list())
 
         g, v = self._current_condition()
         self.log_bus.log(f"[vel_Cal]: Calibration begun. Starting {g.value}-{v.value}, trial 1")
@@ -166,13 +151,8 @@ class VelocityCalibPage(ExperimenterPage):
 
         gesture, velocity = self._current_condition()
 
-        self._twintig_interface.send_command_to_tap_pads(
-            f'{{"note":"TRIAL {self._trial_in_condition} END; gesture: {gesture.value}; velocity: {velocity.value}"}}'
-            )
-        self.log_bus.log(
-            f"[vel_Cal]: Completed {gesture.value}-{velocity.value} "
-            f"trial {self._trial_in_condition + 1}/{self.TRIALS_PER_CONDITION}"
-        )
+        self._twintig_interface.send_command_to_tap_pads(f'{{"note":"TRIAL {self._trial_in_condition} END; gesture: {gesture.value}; velocity: {velocity.value}"}}')
+        self.log_bus.log(f"[vel_Cal]: Completed {gesture.value}-{velocity.value} trial {self._trial_in_condition + 1}/{self.TRIALS_PER_CONDITION}")
 
         self._trial_in_condition += 1
         page = self.get_participant_page()
@@ -181,8 +161,7 @@ class VelocityCalibPage(ExperimenterPage):
 
         QtCore.QTimer.singleShot(1000, self.__update_after_trial_complete)
 
-
-    def __update_after_trial_complete(self):        
+    def __update_after_trial_complete(self):
         if self._trial_in_condition >= self.TRIALS_PER_CONDITION:
             self._trial_in_condition = 0
             self._condition_index += 1
@@ -199,14 +178,11 @@ class VelocityCalibPage(ExperimenterPage):
 
         self._update_ui_state()
 
-
     def _on_stop_velocity_cal(self) -> None:
         if not self._is_calibrating:
             return
 
-        self.studyPhaseRequested.emit(
-            StudyPhases.SETUP
-        )
+        self.studyPhaseRequested.emit(StudyPhases.SETUP)
 
         self._is_calibrating = False
 
@@ -218,8 +194,7 @@ class VelocityCalibPage(ExperimenterPage):
 
         self._update_ui_state()
 
-        vel_calibration_analyser = VelocityCalibrationAnalyser(
-        data_dir=os.getcwd()+r"\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")
+        vel_calibration_analyser = VelocityCalibrationAnalyser(data_dir=os.getcwd() + r"\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")
 
         vel_calibration_analyser.run()
 
@@ -240,6 +215,6 @@ class VelocityCalibPage(ExperimenterPage):
                 "mean": mean_force,
                 "std": std_force,
             }
-        
+
         self.velocityCalibrationDone.emit(velocity_calibration_results)
         self.calibrationDone.emit("Velocity_Calib")  # key matches Setup’s map

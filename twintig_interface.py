@@ -1,30 +1,31 @@
 from __future__ import annotations
-from typing import Iterable
 
+import json
 import os
 import shutil
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Deque, List, Optional, Tuple
-import json
 from fnmatch import fnmatch
+from typing import Callable, Deque, Iterable, List, Optional, Tuple
 
 import ximu3
+
 
 def _connect(device_name: str) -> ximu3.Connection:
     devices = ximu3.PortScanner.scan()
     time.sleep(0.1)  # wait for ports to close
     devices = [d for d in devices if d.device_name == device_name]
-    
+
     if not devices:
         raise RuntimeError(f"Unable to find {device_name}")
-    
+
     connection = ximu3.Connection(devices[0].connection_config)
     connection.open()
 
     return connection
+
 
 def _send_timestamp(connection: ximu3.Connection) -> None:
     response = connection.send_command(f'{{"timestamp":{time.time_ns() // 1000}}}')
@@ -34,6 +35,7 @@ def _send_timestamp(connection: ximu3.Connection) -> None:
 
     if response.error:
         raise RuntimeError(response.error)
+
 
 class ImuConnection:
     def __init__(self, config: ximu3.MuxConnectionConfig) -> None:
@@ -70,9 +72,7 @@ class TwintigInterface:
     TAP_PADS_NAME = "Twintig Tap Pads"
     CARPUS_NAME = "Twintig Carpus"
 
-    def __init__(
-        self, log_destination: Optional[str] = None, log_name: str = "Logged Data"
-    ) -> None:
+    def __init__(self, log_destination: Optional[str] = None, log_name: str = "Logged Data") -> None:
         self.log_destination = os.path.abspath(log_destination or os.getcwd())
         self.log_name = log_name
 
@@ -91,14 +91,14 @@ class TwintigInterface:
     def open(self) -> None:
         if self.__open:
             return
-        
+
         # Connect to tap pads + carpus (mux controller)
         self.__tap_conn = _connect(self.TAP_PADS_NAME)
         self.__carpus_conn = _connect(self.CARPUS_NAME)
 
         # For force readings
         self.__tap_conn.add_serial_accessory_callback(self._serial_accessory_callback)
-        
+
         # For sample rate etc.
         self.__carpus_conn.add_statistics_callback(self._carpus_stats_callback)
         self.__tap_conn.add_statistics_callback(self._tap_pads_stats_callback)
@@ -110,12 +110,12 @@ class TwintigInterface:
         _send_timestamp(self.__carpus_conn)
 
         self.__open = True
-    
+
     def _temp_callback(self, message: ximu3.TemperatureMessage):
-        print(message.temperature)        
+        print(message.temperature)
 
     def send_commands_to_all(self, command_file_path) -> None:
-        if(not self.__open):
+        if not self.__open:
             return
 
         with open(command_file_path) as file:
@@ -126,23 +126,20 @@ class TwintigInterface:
                 for command in script["commands"]:
                     imu_connection.send_command(command)
 
-
-    def send_command_to_all(self, command:str) -> None:
-        if(not self.__open):
+    def send_command_to_all(self, command: str) -> None:
+        if not self.__open:
             return
-        
+
         for imu_connection in self.__imu_connections:
             imu_connection.send_command(command)
 
-
     def close(self) -> None:
-        
         try:
             if self.__tap_conn:
                 self.__tap_conn.close()
         finally:
             self.__tap_conn = None
-        
+
         try:
             if self.__carpus_conn:
                 self.__carpus_conn.close()
@@ -162,7 +159,7 @@ class TwintigInterface:
 
     def _serial_accessory_callback(self, message: ximu3.SerialAccessoryMessage):
         if self.__paused:
-            return        
+            return
 
     def _carpus_stats_callback(self, message: ximu3.Statistics):
         if self.__paused:
@@ -181,11 +178,11 @@ class TwintigInterface:
     @property
     def is_logging(self) -> bool:
         return self.__data_logger is not None
-    
+
     def get_tap_pads_connection_as_list(self) -> list[ximu3.Connection]:
         conns = [self.__tap_conn]
         return conns
-    
+
     def send_command_to_tap_pads(self, command: str) -> None:
         response = self.__tap_conn.send_command(command)
 
@@ -194,6 +191,3 @@ class TwintigInterface:
 
         if response.error:
             raise Exception(f"{response.error}. {command} for {self.__tap_conn.get_config()}")
-    
-        
-    
