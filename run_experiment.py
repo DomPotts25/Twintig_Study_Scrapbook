@@ -16,8 +16,8 @@ def main():
     # Place on two displays if present
     screens = app.screens()
     if len(screens) >= 2:
-        participant_window.setGeometry(screens[0].geometry())
-        experimenter_window.setGeometry(screens[1].geometry())
+        participant_window.setGeometry(screens[1].geometry())
+        experimenter_window.setGeometry(screens[0].geometry())
     else:
         # Tile side by side
         g = screens[0].availableGeometry()

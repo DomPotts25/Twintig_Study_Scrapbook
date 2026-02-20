@@ -48,8 +48,6 @@ class LogBus(QtCore.QObject):
         self.history.append(text)
         self.message.emit(text)
 
-
-# ------------------ Base page with black theme + nav bar ------------------
 class ExperimenterPage(QtWidgets.QWidget):
     # Global control signals (hook in MainWindow)
     connectRequested = QtCore.Signal()
@@ -216,7 +214,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         ctrl_row = QtWidgets.QHBoxLayout()
         self.btn_connect = QtWidgets.QPushButton("Connect Devices")
         self.btn_disconnect = QtWidgets.QPushButton("Disconnect Devices")
-        self.btn_pause_resume = QtWidgets.QPushButton("Pause Experiment")
+        self.btn_toggle_main_data_logger = QtWidgets.QPushButton("Start Main Data Logger")
 
         self.imu_settings_combo = QtWidgets.QComboBox()
         self.imu_settings_combo_label = QtWidgets.QLabel("Sampling Configuration")
@@ -227,7 +225,7 @@ class ExperimenterPage(QtWidgets.QWidget):
 
         self.btn_connect.clicked.connect(self._on_connect_clicked)
         self.btn_disconnect.clicked.connect(self._on_disconnect_clicked)
-        self.btn_pause_resume.clicked.connect(self._on_pause_resume_clicked)
+        self.btn_toggle_main_data_logger.clicked.connect(self._on_data_logger_toggle_clicked)
         self.btn_configure_imu_settings.clicked.connect(self._on_configure_sampling_clicked)       
         self.btn_disable_imu_leds.clicked.connect(self._on_disable_leds)
 
@@ -239,7 +237,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         ctrl_row.addWidget(self.btn_disable_imu_leds)
 
         ctrl_row.addStretch(1)
-        ctrl_row.addWidget(self.btn_pause_resume)
+        ctrl_row.addWidget(self.btn_toggle_main_data_logger)
         panel_layout.addLayout(ctrl_row)
 
         root.addWidget(panel)
@@ -413,11 +411,11 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._pads_msg_rate_hz = max(0.0, float(hz))
         self._refresh_indicators()
 
-    def set_paused(self, paused: bool):
-        self._paused = paused
-        self.btn_pause_resume.setText(
-            "Resume Experiment" if paused else "Pause Experiment"
-        )
+    # def set_paused(self, paused: bool):
+    #     self._paused = paused
+    #     self.btn_toggle_main_data_logger.setText(
+    #         "Resume Experiment" if paused else "Pause Experiment"
+    #     )
 
     # ---------- Build simple nav (fixed back target only) ----------
     def build_nav(self, main_targets: list[str], back_target: str | None):
@@ -443,9 +441,9 @@ class ExperimenterPage(QtWidgets.QWidget):
             self.nav_bar.addWidget(b)
             self.nav_buttons[t] = b
 
-    def _on_pause_resume_clicked(self):
+    def _on_data_logger_toggle_clicked(self):
         self._paused = not self._paused
-        self.btn_pause_resume.setText(
+        self.btn_toggle_main_data_logger.setText(
             "Resume Experiment" if self._paused else "Pause Experiment"
         )
         self.append_log(f"[ui] {'Paused' if self._paused else 'Resumed'} experiment.")
