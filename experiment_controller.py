@@ -3,10 +3,10 @@ from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
-from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage
+from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage, TestTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
-
+from Tools.velocity_calib_analyser import VelocityCalibrationForceMetrics
 from participant_page import ParticipantWindow
 
 QState = QtStateMachine.QState
@@ -27,6 +27,10 @@ for tgt in ["TrialCheck", "StillCalib", "ROM_1_Calib", "ROM_2_Calib", "Midair_Ca
 # TrialCheck -> RunTrials (one-way)
 add_edge(GRAPH, "TrialCheck", "RunTrials")
 
+# TrialCheck <-> TestTrials
+add_edge(GRAPH, "TrialCheck", "TestTrials")
+add_edge(GRAPH, "TestTrials", "TrialCheck")
+
 # RunTrials -> GestureChange / SampleChange / EndTrials (controller-triggered; no user nav)
 for tgt in ["GestureChange", "SampleChange", "EndTrials"]:
     add_edge(GRAPH, "RunTrials", tgt)
@@ -42,7 +46,7 @@ ALL_PAGES = sorted({*GRAPH.keys(), *(n for outs in GRAPH.values() for n in outs)
 # Buttons shown per page (subset of GRAPH[page])
 MAIN_NAV = {
     "Setup": ["TrialCheck"],
-    "TrialCheck": ["RunTrials"],
+    "TrialCheck": ["RunTrials", "TestTrials"],
     "RunTrials": [],
     "GestureChange": ["RunTrials"],
     "SampleChange": ["RunTrials"],
@@ -55,10 +59,10 @@ MAIN_NAV = {
     "EndTrials": [],
 }
 
-# Fixed back buttons (no history). Added Setup3->Setup2, Setup2->Setup. No back for Setup.
 MAIN_BACK = {
     #"Setup3": "Setup2",
     "TrialCheck": "Setup",
+    "TestTrials": "TrialCheck",
     "StillCalib": "Setup",
     "ROM_1_Calib": "Setup",
     "ROM_2_Calib": "Setup",
@@ -70,6 +74,7 @@ MAIN_BACK = {
 PAGE_CLASS = {
     "Setup": SetupPage,
     "TrialCheck": TrialCheckPage,
+    "TestTrials": TestTrialsPage,
     "RunTrials": RunTrialsPage,
     "StillCalib": StillCalibPage,
     "Velocity_Calib": VelocityCalibPage,
@@ -87,7 +92,11 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         super().__init__()
 
         self.twintig_interface = TwintigInterface()
-        self.velocity_calibration: dict | None = None
+        self.velocity_calibration: VelocityCalibrationForceMetrics | None = None
+        # This can now be accessed as: 
+        # cal = self.get_controller().velocity_calibration
+        # mean = cal.conditions["tap"]["fast"].metrics.rise_time_us.mean
+        # sd   = cal.conditions["tap"]["fast"].metrics.peak_slope.sd
 
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
@@ -230,9 +239,12 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
     def set_velocity_calibration(self, calib_data: dict):
         self.velocity_calibration = calib_data
-            
-        self.log_bus.log(f"[ctrl] Velocity calibration loaded ({len(calib_data)} conditions)")
-        self.log_bus.log(f"[ctrl] Example key: {next(iter(calib_data.keys()), None)}")
+        total_conditions = sum(len(velocity_map) for velocity_map in calib_data.conditions.values())
+        self.log_bus.log(f"[ctrl] Velocity calibration loaded ({total_conditions} conditions)")
+
+        for gesture, velocity_map in calib_data.conditions.items():
+            velocities = ", ".join(v.name for v in velocity_map.keys())
+            self.log_bus.log(f"[ctrl]   {gesture.name}: {velocities}")
 
     @QtCore.Slot(int)
     def _on_page_changed(self, index: int):
@@ -253,17 +265,17 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         # TODO add other pages
 
     def _broadcast_experiment_context(self):
-            """Push current controller state into all ExperimenterPage headers."""
-            for p in self.pages.values():
-                if isinstance(p, ExperimenterPage):
-                    p.set_participant_id(self.participant_id)
-                    p.set_study_phase(self.curr_study_phase)
-                    p.set_sample_group(self.curr_sample_group)
-                    p.set_sample_id(self.curr_sample_id)
-                    p.set_sample_name(self.curr_sample_name)
-                    p.set_velocity(self.curr_velocity)
-                    p.set_trial_id(self.curr_trial_id)
-                    p.set_gesture(self.curr_gesture)
+        """Push current controller state into all ExperimenterPage headers."""
+        for p in self.pages.values():
+            if isinstance(p, ExperimenterPage):
+                p.set_participant_id(self.participant_id)
+                p.set_study_phase(self.curr_study_phase)
+                p.set_sample_group(self.curr_sample_group)
+                p.set_sample_id(self.curr_sample_id)
+                p.set_sample_name(self.curr_sample_name)
+                p.set_velocity(self.curr_velocity)
+                p.set_trial_id(self.curr_trial_id)
+                p.set_gesture(self.curr_gesture)
 
     def start_next_trial(self, trial_id: int, sample_group: SampleGroup,
                          sample_id: int, sample_name: str):

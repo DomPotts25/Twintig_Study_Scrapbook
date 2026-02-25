@@ -1,7 +1,7 @@
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_analyser import VelocityCalibrationAnalyser
+from Tools.velocity_calib_analyser import VelocityCalibrationAnalyser, VelocityCalibrationForceMetrics, VelocityCondition, ConditionMetrics, MetricStats
 
 import ximu3
 import shutil
@@ -224,22 +224,33 @@ class VelocityCalibPage(ExperimenterPage):
         vel_calibration_analyser.run()
 
         summary = vel_calibration_analyser.get_summary()
-        self.log_bus.log(summary.to_string)
+        trials_by_condition = vel_calibration_analyser.get_metrics_by_condition()
 
-        data_by_condition = vel_calibration_analyser.get_max_force_by_condition()
+        # Build typed calibration object
+        conditions: dict[Gestures, dict[Velocity, VelocityCondition]] = {}
 
-        velocity_calibration_results = {}
+        for _, row in summary.iterrows():
+            gesture = Gestures(str(row["gesture"])) 
+            velocity = Velocity(str(row["velocity"]))
 
-        for (gesture, velocity), values in data_by_condition.items():
-            values = np.asarray(values, dtype=float)
+            gesture_map = conditions.setdefault(gesture, {})
 
-            mean_force = float(np.nanmean(values))
-            std_force = float(np.nanstd(values))
+            metrics = ConditionMetrics(
+                max_force=MetricStats(mean=float(row.get("max_force_mean", float("nan"))), sd=float(row.get("max_force_std", float("nan")))),
+                min_force=MetricStats(mean=float(row.get("min_force_mean", float("nan"))), sd=float(row.get("min_force_std", float("nan")))),
+                rise_time_us=MetricStats(mean=float(row.get("rise_time_mean_us", float("nan"))), sd=float(row.get("rise_time_std_us", float("nan")))),
+                contact_duration_us=MetricStats(mean=float(row.get("contact_duration_mean_us", float("nan"))), sd=float(row.get("contact_duration_std_us", float("nan")))),
+                peak_slope=MetricStats(mean=float(row.get("peak_slope_mean", float("nan"))), sd=float(row.get("peak_slope_std", float("nan")))),
+            )
 
-            velocity_calibration_results[(gesture, velocity)] = {
-                "mean": mean_force,
-                "std": std_force,
-            }
-        
-        self.velocityCalibrationDone.emit(velocity_calibration_results)
-        self.calibrationDone.emit("Velocity_Calib")  # key matches Setup’s map
+            trials = trials_by_condition.get((gesture.value, velocity.value), [])
+            
+            gesture_map[velocity] = VelocityCondition(
+                n_trials=int(row.get("trial_count", 0)),
+                metrics=metrics,
+                trials=trials,
+            )
+
+        calibration = VelocityCalibrationForceMetrics(conditions=conditions)
+        self.velocityCalibrationDone.emit(calibration)
+        self.calibrationDone.emit("Velocity_Calib")

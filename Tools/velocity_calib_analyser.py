@@ -1,14 +1,45 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import fnmatch
+
+import sys
+sys.path.insert(0, "../") 
+from experiment_factors import Gestures, Velocity
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+
+# FORCE READINGS DATA CLASSES FOR VELOCITY CONTROL
+@dataclass
+class MetricStats:
+    mean: float
+    sd: float
+
+@dataclass
+class ConditionMetrics:
+    max_force: MetricStats
+    min_force: MetricStats
+    rise_time_us: MetricStats
+    contact_duration_us: MetricStats
+    peak_slope: MetricStats
+
+@dataclass
+class VelocityCondition:
+    n_trials: int
+    metrics: ConditionMetrics
+    trials: List[dict] = field(default_factory=list)
+
+@dataclass
+class VelocityCalibrationForceMetrics:
+    conditions: Dict[Gestures, Dict[Velocity, VelocityCondition]]
+###############################################################
+
+
 
 @dataclass(frozen=True)
 class VelocityCalibrationTrialResult:
@@ -32,7 +63,7 @@ class VelocityCalibrationAnalyser:
             folder_prefix: str = "Twintig Tap Pads",
             notification_filename: str = "Notification.csv",
             data_filename: str = "SerialAccessory.csv",
-            force_channel_index: int = 1,  # CH1 = first channel after timestamp
+            force_channel_index: int = 2,  # CH1 = first channel after timestamp
             begin_detection_enabled: bool = True,
             begin_highpass_threshold: float = -0.02,
             begin_holdoff_ms: float = 250.0,):
@@ -460,312 +491,139 @@ class VelocityCalibrationAnalyser:
             y_label="Peak slope (force / µs)",
             title="Peak Slope by Gesture and Velocity",
         )
-
-############################################################################
     
-@dataclass(frozen=True)
-class ForceTrialResult:
-    trial_index: int
-    gesture: str
-    velocity: str
-    sample_id: int
-    start_ts_us: int
-    end_ts_us: int
-    n_samples: int
-    max_force: float
-    min_force: float
-    rep: int        
-
-    # Raw Data               
-    t_us: np.ndarray               
-    force: np.ndarray              
-
-class TrialBlockForceAnalyser:
-   
-    def __init__(
+    def plot_metric_trials_scatter(
         self,
-        data_dir: str | Path,
-        folder_prefix: str = "Twintig Tap Pads",
-        notification_filename: str = "Notification.csv",
-        data_filename: str = "SerialAccessory.csv",
+        metric: str,
+        y_label: str | None = None,
+        title: str | None = None,
+        velocity_order: Tuple[str, ...] = ("slow", "normal", "fast"),
+        jitter: float = 0.05,
+        alpha: float = 0.7,
+        figsize: Tuple[float, float] = (12, 6),
+        show_legend: bool = True,
+        seed: int = 0,
+        annotate: bool = True,
+        text_offset: Tuple[float, float] = (0.01, 0.0),
+        fontsize: int = 8,
     ):
-        self.data_dir = Path(data_dir)
-        self.folder_prefix = folder_prefix
-        self.notification_filename = notification_filename
-        self.data_filename = data_filename
 
-        self._folder: Optional[Path] = None
-        self._trials: List[ForceTrialResult] = []
-        self._summary: Optional[pd.DataFrame] = None
-
-    def run(self) -> None:
-        folder = self.__find_data_folder()
-        notif = self.__load_notification(folder)
-        serial = self.__load_serial(folder)
-        print(f"[ForceAnalyser] Using data folder: {folder}")
-
-        self._folder = folder
-        self._trials = self.__segment_trials(notif, serial)
-        self._summary = pd.DataFrame([t.__dict__ for t in self._trials])
-        print(f"[ForceAnalyser] Trials found: {len(self._trials)}")
-        print("[ForceAnalyser] Summary dataframe:")
-        print(self._summary)
-
-    def get_folder(self) -> Optional[Path]:
-        return self._folder
-    
-    def get_trials(self) -> List[ForceTrialResult]:
-        return self._trials
-
-    def get_dataframe(self) -> pd.DataFrame:
-        return self._summary if self._summary is not None else pd.DataFrame()
-
-    def __find_data_folder(self) -> Path:
-        # Same style as your VelocityCalibrationAnalyser
-        return next(
-            p for p in self.data_dir.iterdir()
-            if p.is_dir() and p.name.startswith(self.folder_prefix)
-        )
-    
-    def __load_notification(self, folder: Path) -> pd.DataFrame:
-        df = pd.read_csv(folder / self.notification_filename)
-        df["Timestamp (us)"] = df["Timestamp (us)"].astype(np.int64)
-        df["String"] = df["String"].astype(str)
-        return df
-
-    def __load_serial(self, folder: Path) -> pd.DataFrame:
-        path = folder / self.data_filename
-
-        with open(path, "r") as f:
-            _header = f.readline()
-            first_data = f.readline().strip()
-
-        n_fields = len(first_data.split(","))
-        if n_fields < 2:
-            raise ValueError(f"Unexpected SerialAccessory format: {path}")
-
-        n_channels = n_fields - 1
-        colnames = ["Timestamp (us)"] + [f"CH{i}" for i in range(n_channels)]
-
-        df = pd.read_csv(
-            path,
-            skiprows=1,
-            header=None,
-            names=colnames,
-            engine="python",
-        )
-
-        df["Timestamp (us)"] = df["Timestamp (us)"].astype(np.int64)
-        for c in colnames[1:]:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-        return df
-    
-    def __is_trial_begin_marker(self, s: str) -> bool:
-        return fnmatch.fnmatch(s.strip(), "TRIAL * BEGIN; gesture: *; sample_id: *; velocity: *")
-
-    def __is_trial_end_marker(self, s: str) -> bool:
-        return fnmatch.fnmatch(s.strip(), "TRIAL * END; gesture: *; sample_id: *; velocity: *")
-
-    def __parse_marker(self, s: str) -> Tuple[int, str, int, str]:
-        parts = [p.strip() for p in s.split(";") if p.strip()]
-        # parts[0] = "TRIAL 73 BEGIN" or "TRIAL 73 END"
-        trial_index = int(parts[0].split()[1])
-
-        def get_kv(prefix: str) -> str:
-            for p in parts[1:]:
-                if p.lower().startswith(prefix.lower()):
-                    return p.split(":", 1)[1].strip()
-            raise ValueError(f"Missing field {prefix} in marker: {s}")
-
-        gesture = get_kv("gesture")
-        sample_id = int(get_kv("sample_id"))
-        velocity = get_kv("velocity").lower()
-        return trial_index, gesture, sample_id, velocity
-    
-    def __segment_trials(self, notification_df: pd.DataFrame, serial_df: pd.DataFrame) -> List[ForceTrialResult]:
-        notification_df = notification_df.sort_values("Timestamp (us)").reset_index(drop=True)
-
-        begins = notification_df[notification_df["String"].apply(self.__is_trial_begin_marker)].copy()
-        ends = notification_df[notification_df["String"].apply(self.__is_trial_end_marker)].copy()
-        ends = ends.sort_values("Timestamp (us)").reset_index(drop=True)
-
-        begin_ts_by_trial: Dict[int, int] = {}
-        for _, row in begins.iterrows():
-            ts = int(row["Timestamp (us)"])
-            try:
-                trial_index, _, _, _ = self.__parse_marker(row["String"])
-            except Exception:
-                continue
-            begin_ts_by_trial[trial_index] = ts
-
-        timestamp = serial_df["Timestamp (us)"].to_numpy()
-        available_channels = [c for c in serial_df.columns if c.startswith("CH")]
-
-        results: List[ForceTrialResult] = []
-        previous_end_timestamp = int(timestamp.min()) - 1
-
-        rep_counter: Dict[Tuple[str, int, str], int] = {}
-
-        for _, row in ends.iterrows():
-            end_timestamp = int(row["Timestamp (us)"])
-            trial_index, gesture, sample_id, velocity = self.__parse_marker(row["String"])
-
-            start_timestamp = begin_ts_by_trial.get(trial_index, int(previous_end_timestamp + 1))
-            if start_timestamp > end_timestamp:
-                start_timestamp = int(previous_end_timestamp + 1)
-
-            ch_name = f"CH{sample_id}"
-            if ch_name not in serial_df.columns:
-                raise ValueError(
-                    f"sample_id={sample_id} refers to missing column {ch_name}. "
-                    f"Available: {available_channels}"
-                )
-
-            mask = (timestamp >= start_timestamp) & (timestamp <= end_timestamp)
-            seg_t = timestamp[mask]
-            seg_force = serial_df.loc[mask, ch_name].to_numpy()
-
-            rep_key = (gesture, sample_id, velocity)
-            if rep_key not in rep_counter:
-                rep_counter[rep_key] = 0
-            rep = rep_counter[rep_key]
-            rep_counter[rep_key] += 1
-
-            results.append(
-                ForceTrialResult(
-                    trial_index=trial_index,
-                    gesture=gesture,
-                    velocity=velocity,
-                    sample_id=sample_id,
-                    start_ts_us=int(start_timestamp),
-                    end_ts_us=int(end_timestamp),
-                    n_samples=int(seg_force.size),
-                    max_force=float(np.nanmax(seg_force)) if seg_force.size else float("nan"),
-                    min_force=float(np.nanmin(seg_force)) if seg_force.size else float("nan"),
-                    rep=rep,
-                    t_us=np.asarray(seg_t, dtype=np.int64),
-                    force=np.asarray(seg_force, dtype=float),
-                )
-            )
-            previous_end_timestamp = end_timestamp
-
-        return results
-
-    # ---------- Plot ----------
-    def plot_scatter_by_sample_id(self, title: str | None = None) -> None:
-        df = self.get_dataframe()
-        if df.empty:
-            raise RuntimeError("No trials found (no matching TRIAL * END markers?)")
-
-        sample_ids = sorted(df["sample_id"].dropna().unique().tolist())
-        x_map = {sid: i for i, sid in enumerate(sample_ids)}
-        df = df.copy()
-        df["x"] = df["sample_id"].map(x_map).astype(float)
-
-        fast = df[df["velocity"] == "velocity.fast"]
-        slow = df[df["velocity"] == "velocity.slow"]
-
-        rng = np.random.default_rng(0)
-        jitter = 0.04
-
-        slow_x = slow["x"] + rng.uniform(-jitter, jitter, size=len(slow))
-        fast_x = fast["x"] + rng.uniform(-jitter, jitter, size=len(fast))
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-
-        ax.scatter(slow_x, slow["min_force"], alpha=0.6, label="slow")
-        ax.scatter(fast_x, fast["min_force"], alpha=0.6, label="fast")
-
-        ax.set_xticks(list(x_map.values()))
-        ax.set_xticklabels([str(s) for s in sample_ids])
-        ax.set_xlabel("sample_id")
-        ax.set_ylabel("Min force (per trial)")
-        ax.set_title(title or "Min force per trial by sample_id (fast vs slow)")
-        ax.grid(axis="y", alpha=0.3)
-        ax.legend()
-
-        plt.tight_layout()
-        plt.show()
-
-    
-    def plot_raw_trials_side_by_side(self) -> None:
         trials = self.get_trials()
         if not trials:
-            raise RuntimeError("No trials loaded. Call run() first.")
+            raise ValueError("No trials available. Run analyser first.")
 
-        # Index trials by (gesture, sample_id, rep, velocity)
-        by_key = {}
-        for t in trials:
-            vel = t.velocity.strip().lower()
-            by_key[(t.gesture, t.sample_id, t.rep, vel)] = t
+        allowed = {
+            "min_force",
+            "max_force",
+            "rise_time_us",
+            "contact_duration_us",
+            "peak_slope",
+        }
+        if metric not in allowed:
+            raise ValueError(f"Unknown metric '{metric}'. Allowed: {sorted(allowed)}")
 
-        # Build paired list (slow, fast) for same gesture/sample_id/rep
-        pairs = []
-        keys = sorted({(g, sid, rep) for (g, sid, rep, _vel) in by_key.keys()})
-        for g, sid, rep in keys:
-            slow = by_key.get((g, sid, rep, "velocity.slow"))
-            fast = by_key.get((g, sid, rep, "velocity.fast"))
-            # keep even if one is missing (still useful)
-            pairs.append((g, sid, rep, slow, fast))
+        df = pd.DataFrame([t.__dict__ for t in trials])
+        if df.empty:
+            raise ValueError("No trial data available.")
 
-        if not pairs:
-            raise RuntimeError("No trial pairs found.")
+        df[metric] = pd.to_numeric(df[metric], errors="coerce")
+        df = df[np.isfinite(df[metric].to_numpy())].copy()
+        if df.empty:
+            raise ValueError(f"Metric '{metric}' has no finite values to plot.")
 
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
-        axL, axR = axes
-        idx = 0
+        gestures = sorted(df["gesture"].dropna().unique().tolist())
+        x_positions = np.arange(len(gestures), dtype=float)
+        x_map = {g: x for g, x in zip(gestures, x_positions)}
 
-        def _plot_one(ax, trial, title):
-            ax.clear()
-            ax.set_title(title)
-            ax.set_xlabel("Time (ms)")
-            ax.grid(True, alpha=0.3)
+        vel_count = max(1, len(velocity_order))
+        vel_spacing = 0.30 / max(1, vel_count)
+        vel_offsets = {
+            v: (i - (vel_count - 1) / 2.0) * vel_spacing
+            for i, v in enumerate(velocity_order)
+        }
 
-            if trial is None or trial.n_samples == 0:
-                ax.text(0.5, 0.5, "Missing / empty", ha="center", va="center", transform=ax.transAxes)
-                return
+        rng = np.random.default_rng(seed)
 
-            t_ms = (trial.t_us - trial.t_us[0]) / 1000.0
-            ax.plot(t_ms, trial.force)
-            ax.set_ylabel("Force (raw)")
+        fig, ax = plt.subplots(figsize=figsize)
 
-        def redraw():
-            nonlocal idx
-            g, sid, rep, slow, fast = pairs[idx]
+        for velocity in velocity_order:
+            df_vel = df[df["velocity"] == velocity]
+            if df_vel.empty:
+                continue
 
-            fig.suptitle(f"{idx+1}/{len(pairs)}  |  gesture={g}  sample_id={sid}  rep={rep}")
+            base_x = df_vel["gesture"].map(x_map).astype(float).to_numpy()
+            offset = float(vel_offsets.get(velocity, 0.0))
+            x_vals = base_x + offset + rng.uniform(-jitter, jitter, size=base_x.size)
+            y_vals = df_vel[metric].to_numpy()
 
-            _plot_one(axL, slow, "slow")
-            _plot_one(axR, fast, "fast")
+            ax.scatter(x_vals, y_vals, alpha=alpha, label=str(velocity))
 
-            # Optional: match y-lims for readability
-            ys = []
-            for t in (slow, fast):
-                if t is not None and t.n_samples:
-                    ys.append(np.nanmin(t.force))
-                    ys.append(np.nanmax(t.force))
-            if ys:
-                lo, hi = float(np.min(ys)), float(np.max(ys))
-                pad = 0.05 * (hi - lo) if hi > lo else 1.0
-                axL.set_ylim(lo - pad, hi + pad)
+            # -------- Add annotations --------
+            if annotate:
+                for x, y, (_, row) in zip(x_vals, y_vals, df_vel.iterrows()):
+                    label = f"{row['trial_index']} | {row['gesture']} | {row['velocity']}"
+                    ax.text(
+                        x + text_offset[0],
+                        y + text_offset[1],
+                        label,
+                        fontsize=fontsize,
+                        alpha=0.75,
+                    )
 
-            fig.canvas.draw_idle()
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(gestures, rotation=30, ha="right")
+        ax.set_ylabel(y_label or metric)
+        ax.set_xlabel("Gesture")
+        ax.set_title(title or f"{metric} per trial by gesture and velocity")
+        ax.grid(True, axis="y", alpha=0.3)
 
-        def on_key(event):
-            nonlocal idx
-            if event.key in ("right", "n"):
-                idx = (idx + 1) % len(pairs)
-                redraw()
-            elif event.key in ("left", "p"):
-                idx = (idx - 1) % len(pairs)
-                redraw()
-            elif event.key in ("escape", "q"):
-                plt.close(fig)
+        if show_legend:
+            ax.legend(title="Velocity")
 
-        fig.canvas.mpl_connect("key_press_event", on_key)
-        redraw()
-        plt.tight_layout()
-        plt.show()
+        fig.tight_layout()
+        return fig, ax
+    
+    def plot_rise_time_trials(self, **kwargs):
+        return self.plot_metric_trials_scatter(
+            metric="rise_time_us",
+            y_label="Rise time (µs)",
+            title="Rise Time per Trial by Gesture and Velocity",
+            **kwargs,
+        )
+
+    def plot_contact_duration_trials(self, **kwargs):
+        return self.plot_metric_trials_scatter(
+            metric="contact_duration_us",
+            y_label="Contact duration (µs)",
+            title="Contact Duration per Trial by Gesture and Velocity",
+            **kwargs,
+        )
+
+    def plot_peak_slope_trials(self, **kwargs):
+        return self.plot_metric_trials_scatter(
+            metric="peak_slope",
+            y_label="Peak slope (force / µs)",
+            title="Peak Slope per Trial by Gesture and Velocity",
+            **kwargs,
+        )
+
+    def plot_max_force_trials(self, **kwargs):
+        return self.plot_metric_trials_scatter(
+            metric="max_force",
+            y_label="Max force",
+            title="Max Force per Trial by Gesture and Velocity",
+            **kwargs,
+        )
+
+    def plot_min_force_trials(self, **kwargs):
+        return self.plot_metric_trials_scatter(
+            metric="min_force",
+            y_label="Min force",
+            title="Min Force per Trial by Gesture and Velocity",
+            **kwargs,
+        )
+
+############################################################################    
 
 def main():
     # analyser = TrialBlockForceAnalyser(
@@ -777,18 +635,22 @@ def main():
 
     calAnalyser = VelocityCalibrationAnalyser(r"C:\Users\dm-potts-admin\Documents\Postdoc\UWE\Outside_Interactions\Object_Characterisation_Study\Study_Program\Twintig_Study_Scrapbook\Logged_Data\Velocity_Calibration_Force_Data\velocityCal")
     calAnalyser.run()
-    df = calAnalyser.get_summary()
-    print(df)
+    # df = calAnalyser.get_summary()
+    # print(df)
 
     # change these plots to scatters for each trial.
     calAnalyser.plot_peak_slope_summary()
     calAnalyser.plot_contact_duration_summary()
     calAnalyser.plot_rise_time_summary()
-    print("rise time mean")
-    print(df["rise_time_mean_us"])
-    print("rise time sd")
-    print(df["rise_time_std_us"])
-    print(df[(df.gesture=="pat") & (df.velocity=="fast")]["rise_time_mean_us"].unique())
+
+    # print("rise time mean")
+    # print(df["rise_time_mean_us"])
+    # print("rise time sd")
+    # print(df["rise_time_std_us"])
+    # print(df[(df.gesture=="pat") & (df.velocity=="fast")]["rise_time_mean_us"].unique())
+    calAnalyser.plot_peak_slope_trials(fontsize=6, text_offset=(0.005, 0))
+    calAnalyser.plot_contact_duration_trials(fontsize=6, text_offset=(0.005, 0))
+    calAnalyser.plot_rise_time_trials(fontsize=6, text_offset=(0.005, 0))
 
     plt.show()
 

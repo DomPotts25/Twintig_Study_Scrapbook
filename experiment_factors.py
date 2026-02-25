@@ -37,7 +37,7 @@ class SampleGroup(str, Enum):
 
 class Gestures(str, Enum):
     TAP = "tap"
-    PAT = "pat"
+    #PAT = "pat"
     # PINCH = "pinch"
     # GRASP = "grasp"
     # STROKE = "stroke"

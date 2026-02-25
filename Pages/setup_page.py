@@ -2,15 +2,13 @@ from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_analyser import TrialBlockForceAnalyser
+from Tools.velocity_calib_analyser import TrialBlockForceAnalyser
 
 import os
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
-
-# TODO: Velocity Calibration Page does not update setup page LED
 class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
     gestureOrderCommitted = QtCore.Signal(object)  # list[Gestures]
@@ -346,9 +344,9 @@ class SetupPage(ExperimenterPage):
 class TrialCheckPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
-        self.set_status("Verify subject ready & parameters valid.")
-        self.chk_ok = QtWidgets.QCheckBox("All checks passed")
-        self.add_content_widget(self.chk_ok)
+        self.set_status("Verify experiment/participant parameters, run some test trials")
+
+
 
 
 class EndTrialsPage(ExperimenterPage):
