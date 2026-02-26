@@ -1,18 +1,17 @@
+import os
+import time
 from collections import deque
-from typing import Deque
 from pathlib import Path
+from typing import Deque
 
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
-from twintig_interface import TwintigInterface
-
 from participant_page import ParticipantWindow
-
-import time
-import os
+from twintig_interface import TwintigInterface
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
+
 
 def populate_imu_settings(combo: QtWidgets.QComboBox) -> None:
     folder_path = Path(os.getcwd() + r"\imu_settings")
@@ -33,9 +32,10 @@ def populate_imu_settings(combo: QtWidgets.QComboBox) -> None:
         return
 
     combo.addItem("Not Selected", None)
-    
+
     for p in json_files:
         combo.addItem(p.name, str(p))
+
 
 class LogBus(QtCore.QObject):
     message = QtCore.Signal(str)
@@ -47,6 +47,7 @@ class LogBus(QtCore.QObject):
     def log(self, text: str):
         self.history.append(text)
         self.message.emit(text)
+
 
 class ExperimenterPage(QtWidgets.QWidget):
     # Global control signals (hook in MainWindow)
@@ -185,11 +186,9 @@ class ExperimenterPage(QtWidgets.QWidget):
             h.addWidget(txt)
             return wrap, dot, txt
 
-        self._led_devices_wrap, self._led_devices, self._lbl_devices = make_led(
-            "Devices: Disconnected"
-        )
+        self._led_devices_wrap, self._led_devices, self._lbl_devices = make_led("Devices: Disconnected")
         self._led_carpus_msg_wrap, self._led_carpus_msg, self._lbl_carpus_msg = make_led("Carpus Msg rate: 0.0 Hz")
-        self._led_pads_msg_wrap, self._led_pads_msg, self._lbl_pads_msg = make_led("Tap Pads Msg rate: 0.0 Hz")       
+        self._led_pads_msg_wrap, self._led_pads_msg, self._lbl_pads_msg = make_led("Tap Pads Msg rate: 0.0 Hz")
 
         self._led_rec_wrap, self._led_rec, self._lbl_rec = make_led("Recording: Off")
 
@@ -226,7 +225,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         self.btn_connect.clicked.connect(self._on_connect_clicked)
         self.btn_disconnect.clicked.connect(self._on_disconnect_clicked)
         self.btn_toggle_main_data_logger.clicked.connect(self._on_data_logger_toggle_clicked)
-        self.btn_configure_imu_settings.clicked.connect(self._on_configure_sampling_clicked)       
+        self.btn_configure_imu_settings.clicked.connect(self._on_configure_sampling_clicked)
         self.btn_disable_imu_leds.clicked.connect(self._on_disable_leds)
 
         ctrl_row.addWidget(self.btn_connect)
@@ -268,13 +267,11 @@ class ExperimenterPage(QtWidgets.QWidget):
     def get_participant_page(self) -> ParticipantWindow | None:
         return self.__participant_window
 
-     # ---------- Experiment context chips ----------
+    # ---------- Experiment context chips ----------
     def set_participant_id(self, pid: str | None):
         """Called by controller to propagate the active participant ID."""
         self._participant_id = pid
-        self._lbl_participant.setText(
-            f"Participant: {pid}" if pid not in (None, "") else "Participant: —"
-        )
+        self._lbl_participant.setText(f"Participant: {pid}" if pid not in (None, "") else "Participant: —")
 
     def set_study_phase(self, phase):
         """phase can be a StudyPhases enum, string, or None."""
@@ -376,22 +373,22 @@ class ExperimenterPage(QtWidgets.QWidget):
             self.set_msg_rate(0.0)
         except Exception as e:
             self.append_log(f"Close error: {e}")
-    
+
     @QtCore.Slot()
     def _on_configure_sampling_clicked(self):
         index = self.imu_settings_combo.currentIndex()
         file_path = self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole)
-        
-        if(not self._twintig_interface.is_open):
+
+        if not self._twintig_interface.is_open:
             self.append_log("Sampling Config not written, please connect devices")
-        elif(self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole) is None):
+        elif self.imu_settings_combo.itemData(index, QtCore.Qt.UserRole) is None:
             self.append_log("Sampling Config not written, please select a valid command file")
         else:
             self._twintig_interface.send_commands_to_all(file_path)
             self.append_log("Sampling Config written to Twintig")
-        
+
         return
-    
+
     def _on_disable_leds(self):
         self._twintig_interface.send_command_to_all('{"colour":null}')
 
@@ -443,28 +440,22 @@ class ExperimenterPage(QtWidgets.QWidget):
 
     def _on_data_logger_toggle_clicked(self):
         self._paused = not self._paused
-        self.btn_toggle_main_data_logger.setText(
-            "Resume Experiment" if self._paused else "Pause Experiment"
-        )
+        self.btn_toggle_main_data_logger.setText("Resume Experiment" if self._paused else "Pause Experiment")
         self.append_log(f"[ui] {'Paused' if self._paused else 'Resumed'} experiment.")
         self.pauseToggled.emit(self._paused)
 
     def _refresh_indicators(self):
         def set_led(led_label: QtWidgets.QLabel, on: bool, on_color="#0f7", off_color="#444"):
-            led_label.setStyleSheet(
-                f"color: {on_color if on else off_color}; font-size: 18px;"
-            )
-        
+            led_label.setStyleSheet(f"color: {on_color if on else off_color}; font-size: 18px;")
+
         set_led(self._led_devices, self._devices_connected)
-        self._lbl_devices.setText(
-            f"Devices: {'Connected' if self._devices_connected else 'Disconnected'}"
-        )
+        self._lbl_devices.setText(f"Devices: {'Connected' if self._devices_connected else 'Disconnected'}")
         set_led(self._led_carpus_msg, self._carpus_msg_rate_hz > 0.1)
         self._lbl_carpus_msg.setText(f"Carpus Msg rate: {self._carpus_msg_rate_hz:.1f} Hz")
         set_led(self._led_pads_msg, self._pads_msg_rate_hz > 0.1)
         self._lbl_pads_msg.setText(f"Tap Pads Msg rate: {self._pads_msg_rate_hz:.1f} Hz")
 
-        set_led(self._led_rec, self._recording, on_color="#fa0")        
+        set_led(self._led_rec, self._recording, on_color="#fa0")
         self._lbl_rec.setText(f"Recording: {'On' if self._recording else 'Off'}")
 
     def showEvent(self, e: QtGui.QShowEvent):
@@ -480,13 +471,10 @@ class ExperimenterPage(QtWidgets.QWidget):
     def _poll_twintig_state(self):
         if not self._twintig_interface:
             return
-        
+
         self._devices_connected = self._twintig_interface.is_open
         self._recording = self._twintig_interface.is_logging
         self._carpus_msg_rate_hz = self._twintig_interface.carpus_msg_rate
         self._pads_msg_rate_hz = self._twintig_interface.tap_pads_msg_rate
-        
+
         self._refresh_indicators()
-
-
-    

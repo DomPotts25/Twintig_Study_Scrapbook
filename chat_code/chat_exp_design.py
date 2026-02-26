@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtStateMachine, QtWidgets
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
 
+
 # ------------------ 1) Full directed graph (legal transitions) ------------------
 def add_edge(g, a, b):
     g.setdefault(a, []).append(b)
@@ -82,14 +83,14 @@ MAIN_BACK = {
 # ------------------ Base page with black theme + nav bar ------------------
 class ExperimenterPage(QtWidgets.QWidget):
     # Signals your controller can handle centrally
-    connectRequested    = QtCore.Signal()
+    connectRequested = QtCore.Signal()
     disconnectRequested = QtCore.Signal()
-    pauseToggled        = QtCore.Signal(bool)   # True = paused, False = resumed
-    recordingToggled    = QtCore.Signal(bool)   # optional: emit when you change recording state
+    pauseToggled = QtCore.Signal(bool)  # True = paused, False = resumed
+    recordingToggled = QtCore.Signal(bool)  # optional: emit when you change recording state
 
     # Emitted by nav buttons (already used in your app)
     backRequested = QtCore.Signal()
-    navRequested  = QtCore.Signal(str)
+    navRequested = QtCore.Signal(str)
 
     def __init__(self, name: str):
         super().__init__()
@@ -115,7 +116,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         """)
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(16,16,16,16)
+        root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
 
         # Title
@@ -152,8 +153,8 @@ class ExperimenterPage(QtWidgets.QWidget):
             return w, dot, txt
 
         self._led_devices_wrap, self._led_devices, self._lbl_devices = make_led("Devices: Disconnected")
-        self._led_msg_wrap,     self._led_msg,     self._lbl_msg     = make_led("Msg rate: 0.0 Hz")
-        self._led_rec_wrap,     self._led_rec,     self._lbl_rec     = make_led("Recording: Off")
+        self._led_msg_wrap, self._led_msg, self._lbl_msg = make_led("Msg rate: 0.0 Hz")
+        self._led_rec_wrap, self._led_rec, self._lbl_rec = make_led("Recording: Off")
 
         ind_row.addWidget(self._led_devices_wrap)
         ind_row.addSpacing(12)
@@ -202,9 +203,11 @@ class ExperimenterPage(QtWidgets.QWidget):
         self._refresh_indicators()
 
     # --------------- Public helpers you can call from anywhere ----------------
-    def set_status(self, text: str): self.status_label.setText(text)
+    def set_status(self, text: str):
+        self.status_label.setText(text)
 
-    def add_content_widget(self, w: QtWidgets.QWidget): self.content_layout.addWidget(w)
+    def add_content_widget(self, w: QtWidgets.QWidget):
+        self.content_layout.addWidget(w)
 
     def append_log(self, text: str):
         self.log.appendPlainText(text)
@@ -236,7 +239,8 @@ class ExperimenterPage(QtWidgets.QWidget):
         for i in reversed(range(self.nav_bar.count())):
             item = self.nav_bar.itemAt(i)
             w = item.widget()
-            if w: w.setParent(None)
+            if w:
+                w.setParent(None)
         self.nav_buttons.clear()
         self.back_button = None
 
@@ -275,6 +279,7 @@ class ExperimenterPage(QtWidgets.QWidget):
         # LED colors
         def set_led(led_label: QtWidgets.QLabel, on: bool, on_color="#0f7", off_color="#444"):
             led_label.setStyleSheet(f"color: {on_color if on else off_color}; font-size: 18px;")
+
         # Devices
         set_led(self._led_devices, self._devices_connected)
         self._lbl_devices.setText(f"Devices: {'Connected' if self._devices_connected else 'Disconnected'}")
@@ -298,9 +303,9 @@ class Setup1Page(ExperimenterPage):
         cal_v = QtWidgets.QVBoxLayout(cal_group)
 
         btn_still = QtWidgets.QPushButton("Open StillCalib")
-        btn_rom1  = QtWidgets.QPushButton("Open ROM_1_Calib")
-        btn_rom2  = QtWidgets.QPushButton("Open ROM_2_Calib")
-        btn_mid   = QtWidgets.QPushButton("Open Midair_Calib")
+        btn_rom1 = QtWidgets.QPushButton("Open ROM_1_Calib")
+        btn_rom2 = QtWidgets.QPushButton("Open ROM_2_Calib")
+        btn_mid = QtWidgets.QPushButton("Open Midair_Calib")
 
         # Hook to base-class signal; controller already listens for this
         btn_still.clicked.connect(lambda: self.navRequested.emit("StillCalib"))
@@ -321,6 +326,7 @@ class Setup1Page(ExperimenterPage):
 
         self.add_content_widget(wrap)
 
+
 class Setup2Page(ExperimenterPage):
     def __init__(self, name):
         super().__init__(name)
@@ -329,11 +335,14 @@ class Setup2Page(ExperimenterPage):
         # Example setup controls unique to Setup2
         grid = QtWidgets.QGridLayout()
         grid.addWidget(QtWidgets.QLabel("Environment preset:"), 0, 0)
-        cmb = QtWidgets.QComboBox(); cmb.addItems(["Lab A", "Lab B", "Field"])
+        cmb = QtWidgets.QComboBox()
+        cmb.addItems(["Lab A", "Lab B", "Field"])
         grid.addWidget(cmb, 0, 1)
 
         grid.addWidget(QtWidgets.QLabel("Noise filter:"), 1, 0)
-        spin = QtWidgets.QSpinBox(); spin.setRange(0, 100); spin.setValue(30)
+        spin = QtWidgets.QSpinBox()
+        spin.setRange(0, 100)
+        spin.setValue(30)
         grid.addWidget(spin, 1, 1)
 
         btn_apply = QtWidgets.QPushButton("Apply Settings")
@@ -370,9 +379,7 @@ class TrialCheckPage(ExperimenterPage):
 
 class RunTrialsPage(ExperimenterPage):
     # expose a signal that a controller can use to trigger state transitions
-    requestTransition = QtCore.Signal(
-        str
-    )  # "GestureChange" / "SampleChange" / "EndTrials"
+    requestTransition = QtCore.Signal(str)  # "GestureChange" / "SampleChange" / "EndTrials"
 
     def __init__(self, name):
         super().__init__(name)
@@ -403,9 +410,7 @@ class RunTrialsPage(ExperimenterPage):
             b = QtWidgets.QPushButton(f"[demo] {label}")
             b.clicked.connect(lambda _, t=label: self.requestTransition.emit(t))
             demo.addWidget(b)
-        self.add_content_widget(
-            QtWidgets.QLabel("Developer demo triggers below (remove in production):")
-        )
+        self.add_content_widget(QtWidgets.QLabel("Developer demo triggers below (remove in production):"))
         demo_wrap = QtWidgets.QWidget()
         demo_wrap.setLayout(demo)
         self.add_content_widget(demo_wrap)
@@ -525,9 +530,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if src in MAIN_BACK:
                 back_tgt = MAIN_BACK[src]
                 if page.back_button:
-                    page.backRequested.connect(
-                        self._edge_emitters[(src, back_tgt)].fired
-                    )
+                    page.backRequested.connect(self._edge_emitters[(src, back_tgt)].fired)
 
         # Hook controller-driven transitions (RunTrials → X)
         run_trials = self.pages.get("RunTrials")

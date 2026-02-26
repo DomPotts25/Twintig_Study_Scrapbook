@@ -1,11 +1,10 @@
-from Pages.experimenter_page import ExperimenterPage
+import os
+
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Tools.velocity_calib_analyser import VelocityCalibrationAnalyser
 from Tools.trial_force_analyser import TrialBlockForceAnalyser
-
-import os
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -13,7 +12,7 @@ QStateMachine = QtStateMachine.QStateMachine
 class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
     gestureOrderCommitted = QtCore.Signal(object)  # list[Gestures]
-    sampleOrderCommitted = QtCore.Signal(object)   # list[SampleGroup]
+    sampleOrderCommitted = QtCore.Signal(object)  # list[SampleGroup]
 
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
@@ -114,8 +113,7 @@ class SetupPage(ExperimenterPage):
             self.gesture_combos.append(cb)
             gesture_row.addWidget(cb)
 
-
-        # --- Samples --- 
+        # --- Samples ---
         sample_group = QtWidgets.QGroupBox("Sample Setup")
         sample_group_row = QtWidgets.QHBoxLayout(sample_group)
 
@@ -138,7 +136,7 @@ class SetupPage(ExperimenterPage):
 
             for label, enum_member in self._sample_options:
                 cb.addItem(label, userData=enum_member)
-            
+
             cb.currentIndexChanged.connect(self._on_sample_combo_box_changed)
             self.sample_combos.append(cb)
             sample_group_row.addWidget(cb)
@@ -169,7 +167,7 @@ class SetupPage(ExperimenterPage):
             except TypeError:
                 pass
             btn.clicked.connect(lambda _, t=tgt: self._attempt_nav(t))
-    
+
     def _attempt_nav(self, target: str):
         ok, issues = self._is_ready_to_proceed()
         if ok:
@@ -197,6 +195,7 @@ class SetupPage(ExperimenterPage):
             )
 
         # ---- Readiness checks ----
+
     def _is_ready_to_proceed(self) -> tuple[bool, list[str]]:
         issues: list[str] = []
 
@@ -271,7 +270,7 @@ class SetupPage(ExperimenterPage):
             if data is not None:
                 selected.add(data)
         return selected
-    
+
     @QtCore.Slot()
     def _on_sample_combo_box_changed(self):
         """Rebuild each combo's items so already-chosen samples are unavailable in others."""
@@ -313,7 +312,7 @@ class SetupPage(ExperimenterPage):
         if not self.pid_input.hasAcceptableInput():
             self.log_bus.log("Invalid Participant ID. Enter an integer 0–1000.")
             return
-        
+
         pid_int = int(text)
         self.log_bus.log(f"Participant ID set to {pid_int}.")
         self.participantIdCommitted.emit(str(pid_int))
@@ -342,6 +341,7 @@ class SetupPage(ExperimenterPage):
     def on_calibration_done(self, page_name: str):
         self.set_cal_status(page_name, True)
 
+
 class TrialCheckPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
@@ -365,11 +365,11 @@ class EndTrialsPage(ExperimenterPage):
         btn_inspect_trial_by_trial.clicked.connect(self._on_inspect_trial_by_trial)
         self.add_content_widget(btn_inspect_trial_by_trial)
 
-        self.__trial_analyser : TrialBlockForceAnalyser | None = None
+        self.__trial_analyser: TrialBlockForceAnalyser | None = None
 
-    def check_analyser(self)-> None:
-        if(self.__trial_analyser is None):
-            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+    def check_analyser(self) -> None:
+        if self.__trial_analyser is None:
+            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd() + "/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
             self.__trial_analyser.run()
 
     def _on_inspect_max_force_clicked(self):
@@ -379,5 +379,3 @@ class EndTrialsPage(ExperimenterPage):
     def _on_inspect_trial_by_trial(self):
         self.check_analyser()
         self.__trial_analyser.plot_raw_trials_side_by_side()
-
-

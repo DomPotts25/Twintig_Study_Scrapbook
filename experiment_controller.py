@@ -1,7 +1,7 @@
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
+from Pages.calibration_pages import GenericPage, StillCalibPage, VelocityCalibPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
 from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage, TestTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
@@ -11,6 +11,7 @@ from participant_page import ParticipantWindow
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
+
 
 # ------------------ 1) Full directed graph (legal transitions) ------------------
 def add_edge(g, a, b):
@@ -50,7 +51,6 @@ MAIN_NAV = {
     "RunTrials": [],
     "GestureChange": ["RunTrials"],
     "SampleChange": ["RunTrials"],
-
     "StillCalib": [],
     "ROM_1_Calib": [],
     "ROM_2_Calib": [],
@@ -60,7 +60,7 @@ MAIN_NAV = {
 }
 
 MAIN_BACK = {
-    #"Setup3": "Setup2",
+    # "Setup3": "Setup2",
     "TrialCheck": "Setup",
     "TestTrials": "TrialCheck",
     "StillCalib": "Setup",
@@ -83,11 +83,11 @@ PAGE_CLASS = {
     "EndTrials": EndTrialsPage
 }
 
+
 # ---------- Controller ----------
 class ExperimenterWindow(QtWidgets.QMainWindow):
-
     pageEntered = QtCore.Signal(str)  # page name
-    
+
     def __init__(self, start_page="Setup"):
         super().__init__()
 
@@ -103,7 +103,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         self.stack = QtWidgets.QStackedWidget()
         self.setCentralWidget(self.stack)
-        
+
         self.participant_id: str | None = None
 
         self.curr_study_phase = StudyPhases.SETUP
@@ -117,7 +117,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         self.curr_gesture = None
         self.curr_velocity = None
         self.curr_trial_valid = True
-        
+
         self.gesture_sequence: list[Gestures] = []
         self.sample_group_sequence: list[SampleGroup] = []
 
@@ -139,7 +139,6 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             setup.gestureOrderCommitted.connect(self.set_gesture_sequence)
             setup.sampleOrderCommitted.connect(self.set_sample_sequence)
 
-
         # Calibration flag wiring
         still = self.pages.get("StillCalib")
         if isinstance(still, StillCalibPage) and hasattr(setup, "on_calibration_done"):
@@ -149,12 +148,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         if isinstance(still, VelocityCalibPage) and hasattr(setup, "on_calibration_done"):
             still.calibrationDone.connect(setup.on_calibration_done)
 
-
-
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
                 p.set_twintig_interface(self.twintig_interface)
-
 
         # Build state machine
         self.machine = QStateMachine(self)
@@ -181,21 +177,15 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         # Wire visible nav buttons
         for src, page in self.pages.items():
-            page.navRequested.connect(
-                lambda target, s=src: self._handle_nav_click(s, target)
-            )
+            page.navRequested.connect(lambda target, s=src: self._handle_nav_click(s, target))
             if src in MAIN_BACK and page.back_button:
                 back_tgt = MAIN_BACK[src]
-                page.backRequested.connect(
-                    lambda s=src, t=back_tgt: self._emit_edge(s, t)
-                )
+                page.backRequested.connect(lambda s=src, t=back_tgt: self._emit_edge(s, t))
 
         # Controller-driven transitions from RunTrials
         run_trials = self.pages.get("RunTrials")
         if isinstance(run_trials, RunTrialsPage):
-            run_trials.requestTransition.connect(
-                lambda tgt: self._emit_edge("RunTrials", tgt)
-            )
+            run_trials.requestTransition.connect(lambda tgt: self._emit_edge("RunTrials", tgt))
 
         self.machine.setInitialState(self.states[start_page])
         self.machine.start()
@@ -221,7 +211,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             page.disconnectRequested.connect(handle_disconnect)
             page.pauseToggled.connect(handle_pause)
             page.studyPhaseRequested.connect(self.set_study_phase)
-        
+
         for p in self.pages.values():
             if isinstance(p, ExperimenterPage):
                 p.set_twintig_interface(self.twintig_interface)
@@ -229,7 +219,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         vel_page = self.pages.get("Velocity_Calib")
         if isinstance(vel_page, VelocityCalibPage):
             vel_page.velocityCalibrationDone.connect(self.set_velocity_calibration)
-        
+
         self._broadcast_experiment_context()
 
     def connect_participant_window(self, participant_page: ParticipantWindow):
@@ -277,8 +267,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
                 p.set_trial_id(self.curr_trial_id)
                 p.set_gesture(self.curr_gesture)
 
-    def start_next_trial(self, trial_id: int, sample_group: SampleGroup,
-                         sample_id: int, sample_name: str):
+    def start_next_trial(self, trial_id: int, sample_group: SampleGroup, sample_id: int, sample_name: str):
         self.set_study_phase(StudyPhases.RUN_TRIALS)
         self.set_trial_id(trial_id)
         self.set_sample_group(sample_group)
@@ -332,9 +321,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             labels.append(getattr(g, "name", str(g)))
 
         if labels:
-            self.log_bus.log(
-                "[ctrl] Gesture order for this participant: " + " → ".join(labels)
-            )
+            self.log_bus.log("[ctrl] Gesture order for this participant: " + " → ".join(labels))
         else:
             self.log_bus.log("[ctrl] Gesture order for this participant: (empty)")
 
@@ -352,12 +339,10 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             labels.append(getattr(s, "name", str(s)))
 
         if labels:
-            self.log_bus.log(
-                "[ctrl] Sample order for this participant: " + " → ".join(labels)
-            )
+            self.log_bus.log("[ctrl] Sample order for this participant: " + " → ".join(labels))
         else:
             self.log_bus.log("[ctrl] Sample order for this participant: (empty)")
-        
+
         self.set_sample_group(self.sample_group_sequence[0])
 
     def _emit_edge(self, src: str, tgt: str):

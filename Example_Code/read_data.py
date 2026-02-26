@@ -1,7 +1,8 @@
 import os
-import ximu3csv
+
 import matplotlib.pyplot as plt
 import numpy as np
+import ximu3csv
 
 devices = ximu3csv.read(os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logged Data"))
 

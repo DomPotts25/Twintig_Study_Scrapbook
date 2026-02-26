@@ -9,7 +9,7 @@ class Velocity(str, Enum):
 
 class SampleGroup(str, Enum):
     SHAPE = "shape"
-    #STIFF_SOFT = "stiff_soft"
+    # STIFF_SOFT = "stiff_soft"
     # STIFF_HARD = "stiff_hard"
     # TEXTURE = "texture"
     # HOLLOWNESS = "hollowness"
@@ -34,6 +34,7 @@ class SampleGroup(str, Enum):
 
 # class HollowSamples(str, Enum):
 #     HOLLOW = "hollow"
+
 
 class Gestures(str, Enum):
     TAP = "tap"

@@ -37,7 +37,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
-
 from twintig_logger import FSRPacket, TwintigLogger, get_logger
 
 # ---------------------------- Calibration Model ---------------------------- #
@@ -47,6 +46,7 @@ class Intensity(str, Enum):
     SOFT = "soft"
     MEDIUM = "medium"
     HARD = "hard"
+
 
 @dataclass
 class ChannelCalib:
@@ -59,9 +59,7 @@ class ChannelCalib:
 
     def update_baseline(self, sample: float) -> None:
         # IIR low-pass to track baseline drift
-        self.baseline = (
-            1 - self.baseline_alpha
-        ) * self.baseline + self.baseline_alpha * sample
+        self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * sample
 
     def add_peak(self, intensity: Intensity, amp: float) -> None:
         if intensity == Intensity.SOFT:
@@ -72,13 +70,7 @@ class ChannelCalib:
             self.hard_peaks.append(amp)
 
     def bucket(self, intensity: Intensity) -> List[float]:
-        return (
-            self.soft_peaks
-            if intensity == Intensity.SOFT
-            else self.med_peaks
-            if intensity == Intensity.MEDIUM
-            else self.hard_peaks
-        )
+        return self.soft_peaks if intensity == Intensity.SOFT else self.med_peaks if intensity == Intensity.MEDIUM else self.hard_peaks
 
     def threshold(self, intensity: Intensity) -> Optional[float]:
         data = self.bucket(intensity)
@@ -136,9 +128,7 @@ class CalibrationManager(QtCore.QObject):
             # write header only if empty file
             try:
                 if self._csv_file.tell() == 0:
-                    self._csv_writer.writerow(
-                        ["timestamp_us", "channel", "fsr_value", "intensity"]
-                    )
+                    self._csv_writer.writerow(["timestamp_us", "channel", "fsr_value", "intensity"])
                     self._csv_file.flush()
             except Exception:
                 pass
@@ -156,10 +146,7 @@ class CalibrationManager(QtCore.QObject):
     def is_done(self) -> bool:
         if not self.active or self.target_intensity is None:
             return False
-        return (
-            len(self.channels[self.current_channel].bucket(self.target_intensity))
-            >= self.required_count
-        )
+        return len(self.channels[self.current_channel].bucket(self.target_intensity)) >= self.required_count
 
     def _update_stats(self, ch: int, x: float) -> Tuple[float, float]:
         # Welford-esque IIR stats for simple z-scoring
@@ -209,15 +196,11 @@ class CalibrationManager(QtCore.QObject):
                         self.calib_updated.emit()
                 self._armed = False
 
-    def _write_csv(
-        self, ts_us: int, ch: int, value: float, intensity: Intensity
-    ) -> None:
+    def _write_csv(self, ts_us: int, ch: int, value: float, intensity: Intensity) -> None:
         if self._csv_writer is None:
             return
         try:
-            self._csv_writer.writerow(
-                [int(ts_us), int(ch), float(value), intensity.value]
-            )
+            self._csv_writer.writerow([int(ts_us), int(ch), float(value), intensity.value])
             self._csv_file.flush()
         except Exception:
             pass
@@ -401,9 +384,7 @@ class Controller(QtCore.QObject):
         self.calib.calib_updated.connect(self._on_calib_progress)
 
         # Logger callback -> Qt thread via signal
-        self._fsr_signal = QtCore.SignalInstance = type(
-            "_Sig", (QtCore.QObject,), {"sig": QtCore.Signal(object)}
-        )()
+        self._fsr_signal = QtCore.SignalInstance = type("_Sig", (QtCore.QObject,), {"sig": QtCore.Signal(object)})()
         self._fsr_signal.sig.connect(self._on_fsr)
         self.logger.add_fsr_callback(lambda pkt: self._fsr_signal.sig.emit(pkt))
 
@@ -482,9 +463,7 @@ class Controller(QtCore.QObject):
         import os
         import time as _time
 
-        cal_csv = os.path.join(
-            self.logger.log_destination, self.logger.log_name, "calibration_samples.csv"
-        )
+        cal_csv = os.path.join(self.logger.log_destination, self.logger.log_name, "calibration_samples.csv")
         self.calib.set_csv_path(cal_csv)
         self._on_calib_progress()
 

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Iterable
 
 import os
 import shutil
@@ -7,9 +6,10 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Deque, List, Optional, Tuple
+from typing import Callable, Deque, Iterable, List, Optional, Tuple
 
 import ximu3
+
 
 # --------------------------- Low-level helpers --------------------------- #
 def _connect(device_name: str) -> ximu3.Connection:
@@ -21,24 +21,18 @@ def _connect(device_name: str) -> ximu3.Connection:
     connection = ximu3.Connection(devices[0].connection_info)
     result = connection.open()
     if result != ximu3.RESULT_OK:
-        raise RuntimeError(
-            f"Unable to open connection {connection.get_info().to_string()}. {ximu3.result_to_string(result)}"
-        )
+        raise RuntimeError(f"Unable to open connection {connection.get_info().to_string()}. {ximu3.result_to_string(result)}")
     return connection
 
 
 def _send_timestamp(connection: ximu3.Connection) -> None:
-    responses = connection.send_commands(
-        [f'{{"timestamp":{time.time_ns() // 1000}}}'], 0, 500
-    )
+    responses = connection.send_commands([f'{{"timestamp":{time.time_ns() // 1000}}}'], 0, 500)
 
     if not responses:
         raise RuntimeError(f"No response to for {connection.get_info()}")
     cmd = ximu3.CommandMessage.parse(responses[0])
     if cmd.error:
         raise RuntimeError(cmd.error)
-
-
 
 
 # ------------------------------ Data Types ------------------------------ #
@@ -70,9 +64,7 @@ class TwintigLogger:
     TAP_PADS_NAME = "Twintig Tap Pads"
     CARPUS_NAME = "Twintig Carpus"
 
-    def __init__(
-        self, log_destination: Optional[str] = None, log_name: str = "Logged Data"
-    ) -> None:
+    def __init__(self, log_destination: Optional[str] = None, log_name: str = "Logged Data") -> None:
         self.log_destination = os.path.abspath(log_destination or os.getcwd())
         self.log_name = log_name
 
@@ -103,9 +95,7 @@ class TwintigLogger:
         self._tap_conn.add_serial_accessory_callback(self._serial_accessory_callback)
 
         # Connect IMUs via mux (0x41..0x50)
-        connect_infos = [
-            ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(65, 85)
-        ]
+        connect_infos = [ximu3.MuxConnectionInfo(c, self._carpus_conn) for c in range(65, 85)]
         self._imu_conns = [ximu3.Connection(ci) for ci in connect_infos]
         for c in self._imu_conns:
             result = c.open()
@@ -124,9 +114,7 @@ class TwintigLogger:
 
         self._open = True
 
-    def start_logging(
-        self, delete_existing: bool = False, make_unique_on_conflict: bool = True
-    ) -> None:
+    def start_logging(self, delete_existing: bool = False, make_unique_on_conflict: bool = True) -> None:
         """Start the ximu3.DataLogger.
 
         If a previous session folder exists and `delete_existing` is False,
@@ -150,11 +138,7 @@ class TwintigLogger:
                 idx = 1
                 while os.path.isdir(f"{base_path} ({idx})") and idx < 1000:
                     idx += 1
-                path = (
-                    f"{base_path} ({idx})"
-                    if not os.path.isdir(f"{base_path} ({idx})")
-                    else base_path + time.strftime(" %Y-%m-%d_%H-%M-%S")
-                )
+                path = f"{base_path} ({idx})" if not os.path.isdir(f"{base_path} ({idx})") else base_path + time.strftime(" %Y-%m-%d_%H-%M-%S")
                 # Update log_name so files end up under the unique folder
                 self.log_name = os.path.basename(path)
 
@@ -168,15 +152,11 @@ class TwintigLogger:
             msg = ximu3.result_to_string(result)
             if make_unique_on_conflict and "Entity already exists" in msg:
                 self.log_name = self.log_name + time.strftime(" %Y-%m-%d_%H-%M-%S")
-                self._data_logger = ximu3.DataLogger(
-                    self.log_destination, self.log_name, conns
-                )  # retry
+                self._data_logger = ximu3.DataLogger(self.log_destination, self.log_name, conns)  # retry
                 result = self._data_logger.get_result()
             if result != ximu3.RESULT_OK:
-                raise RuntimeError(
-                    f"Data logger failed. {ximu3.result_to_string(result)}"
-                )
-            
+                raise RuntimeError(f"Data logger failed. {ximu3.result_to_string(result)}")
+
     def get_msg_rate_hz(self, horizon_s: float = 2.0) -> float:
         """Return aggregate incoming message rate (Hz) over the last ~horizon_s seconds."""
         with self._latest_lock:
@@ -194,7 +174,6 @@ class TwintigLogger:
                 count += 1
             dt = newest - first
             return (count - 1) / (dt / 1_000_000.0) if dt > 0 else 0.0
-
 
     def pause_logging(self) -> None:
         # Software pause; DataLogger continues, but we skip user callbacks
@@ -257,7 +236,7 @@ class TwintigLogger:
         pkt = FSRPacket(timestamp_us=message.timestamp, values=values)
         with self._latest_lock:
             self._latest_fsr = pkt
-            self._traffic_ts.append(pkt.timestamp_us) 
+            self._traffic_ts.append(pkt.timestamp_us)
         for cb in self._fsr_callbacks:
             try:
                 cb(pkt)

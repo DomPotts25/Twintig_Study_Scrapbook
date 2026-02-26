@@ -1,21 +1,19 @@
 from __future__ import annotations
 
+import os
 import random
+import shutil
 from typing import List, Tuple
 
-from Pages.experimenter_page import ExperimenterPage
+import ximu3
 from PySide6 import QtCore, QtWidgets
+from ximu3 import DataLogger
+
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Tools.trial_force_analyser import TrialBlockForceAnalyser
 
-import ximu3
-from ximu3 import DataLogger
-
-import shutil
-import os
 
 class RunTrialsPage(ExperimenterPage):
-
     requestTransition = QtCore.Signal(str)  # "GestureChange" / "SampleChange" / "EndTrials"
 
     def __init__(self, name, log_bus):
@@ -51,8 +49,8 @@ class RunTrialsPage(ExperimenterPage):
         self.btn_begin.clicked.connect(self._on_begin_trials)
         self.btn_next.clicked.connect(self._on_next_trial)
         self.btn_end.clicked.connect(self._on_end_trials_clicked)
-        self.__sample_channels = [0,1,2,3]
-        self.__reps = [0,1,2]
+        self.__sample_channels = [0, 1, 2, 3]
+        self.__reps = [0, 1, 2]
         self.__trial_id: int = 0
         self._sample_group_idx: int = 0
         self.__gesture_idx: int = 0
@@ -101,16 +99,14 @@ class RunTrialsPage(ExperimenterPage):
             self.lbl_next_gesture.setText(f"Next gesture: {g}")
         else:
             self.lbl_next_gesture.setText("Next gesture: (complete)")
-    
+
     def _load_one_trial(self) -> bool:
         ctrl = self._controller()
         gesture_seq = self._gesture_sequence()
         sample_group_seq = self._sample_group_sequence()
 
         if not gesture_seq or not sample_group_seq:
-            self.lbl_trial.setText(
-                "No gesture/sample-group sequence set yet. Go to Setup and commit them first."
-            )
+            self.lbl_trial.setText("No gesture/sample-group sequence set yet. Go to Setup and commit them first.")
             return False
 
         # If this block has no remaining randomized permutations, create them now
@@ -141,14 +137,8 @@ class RunTrialsPage(ExperimenterPage):
             ctrl.set_velocity(velocity)
 
         # Display
-        self.lbl_trial.setText(
-            f"Trial {self.__trial_id} | sample_group={sample_group} | gesture={gesture} "
-            f"| sample_id={sample_id} | velocity={velocity} | repetition={rep}"
-        )
-        self.log_bus.log(
-            f"[trial] id={self.__trial_id} group={sample_group} gesture={gesture} "
-            f"sample_id={sample_id} velocity={velocity} rep={rep}"
-        )
+        self.lbl_trial.setText(f"Trial {self.__trial_id} | sample_group={sample_group} | gesture={gesture} | sample_id={sample_id} | velocity={velocity} | repetition={rep}")
+        self.log_bus.log(f"[trial] id={self.__trial_id} group={sample_group} gesture={gesture} sample_id={sample_id} velocity={velocity} rep={rep}")
 
         self._current_trial_ctx = {
             "trial_id": self.__trial_id,
@@ -158,25 +148,19 @@ class RunTrialsPage(ExperimenterPage):
             "velocity": velocity,
             "repetition": rep,
         }
-        
-        self.get_participant_page().set_prompt(f"Please {str(self._current_trial_ctx["gesture"]).upper()} Sample {str(self._current_trial_ctx["sample_id"]+1).upper()} \n {str(self._current_trial_ctx["velocity"]).split(".")[1]} \n \n {len(self.__pending_trials)} Trials remaining\n")
+
+        self.get_participant_page().set_prompt(f"Please {str(self._current_trial_ctx['gesture']).upper()} Sample {str(self._current_trial_ctx['sample_id'] + 1).upper()} \n {str(self._current_trial_ctx['velocity']).split('.')[1]} \n \n {len(self.__pending_trials)} Trials remaining\n")
 
         # Send LED command!
 
         self.__trial_id += 1
         return True
-    
+
     def _send_trial_end_note(self):
         context = self._current_trial_ctx
         if not context:
             return
-        self._twintig_interface.send_command_to_tap_pads(
-            f'{{"note":"TRIAL {context["trial_id"]} END; '
-            f'gesture: {context["gesture"]}; '
-            f'sample_id: {context["sample_id"]}; '
-            f'velocity: {context["velocity"]}; '
-            f'repetition: {context["repetition"]};"}}'
-        )
+        self._twintig_interface.send_command_to_tap_pads(f'{{"note":"TRIAL {context["trial_id"]} END; gesture: {context["gesture"]}; sample_id: {context["sample_id"]}; velocity: {context["velocity"]}; repetition: {context["repetition"]};"}}')
 
     @QtCore.Slot()
     def _on_begin_trials(self):
@@ -185,7 +169,7 @@ class RunTrialsPage(ExperimenterPage):
         ok = self._load_one_trial()
         if not ok:
             return
-        
+
         # create data logger for force data
         out_dir = os.path.join(os.getcwd(), "Logged_Data", "Trial_Force_Data", "Tap_Pads_Data")
         try:
@@ -193,27 +177,16 @@ class RunTrialsPage(ExperimenterPage):
         except Exception as e:
             print(e)
 
-        self.__forceDataLogger = DataLogger(os.path.join(os.getcwd(), "Logged_Data", "Trial_Force_Data"), "Tap_Pads_Data", 
-                                            self._twintig_interface.get_tap_pads_connection_as_list())
-        
+        self.__forceDataLogger = DataLogger(os.path.join(os.getcwd(), "Logged_Data", "Trial_Force_Data"), "Tap_Pads_Data", self._twintig_interface.get_tap_pads_connection_as_list())
 
         context = self._current_trial_ctx
-        self._twintig_interface.send_command_to_tap_pads(
-            f'{{"note":"TRIAL {context["trial_id"]} BEGIN; '
-            f'gesture: {context["gesture"]}; '
-            f'sample_id: {context["sample_id"]}; '
-            f'velocity: {context["velocity"]}; '
-            f'repetition: {context["repetition"]};"}}'
-        )
-
-        
+        self._twintig_interface.send_command_to_tap_pads(f'{{"note":"TRIAL {context["trial_id"]} BEGIN; gesture: {context["gesture"]}; sample_id: {context["sample_id"]}; velocity: {context["velocity"]}; repetition: {context["repetition"]};"}}')
 
         self.btn_begin.setEnabled(False)
         self.btn_next.setEnabled(True)
 
-
     def __evaluate_next_trial(self):
-        #print("hello!")
+        # print("hello!")
         # If there is no next trial to load, we just ended the final trial of the block.
         if not self.__pending_trials:
             gesture_seq = self._gesture_sequence()
@@ -264,12 +237,12 @@ class RunTrialsPage(ExperimenterPage):
         self.requestTransition.emit("EndTrials")
         self.studyPhaseRequested.emit(StudyPhases.END_EXPERIMENT)
         self.get_participant_page().set_prompt("Experiment Complete! \n \n \n  you for participating :^)")
-    
+
     def showEvent(self, event):
         super().showEvent(event)
         self._update_next_gesture_label()
         self._reset_for_entry()
-    
+
     def _reset_for_entry(self):
         # wipe old text + require begin again
         self.lbl_trial.setText("Ready. Press Begin trials to load the first trial.")
@@ -277,7 +250,6 @@ class RunTrialsPage(ExperimenterPage):
         self.get_participant_page().set_prompt("Ready to begin next trials? \n")
         self.btn_next.setEnabled(False)
         self.btn_begin.setEnabled(True)
-
 
 
 class GestureChangeReviewPage(ExperimenterPage):
@@ -295,11 +267,11 @@ class GestureChangeReviewPage(ExperimenterPage):
         btn_inspect_trial_by_trial.clicked.connect(self._on_inspect_trial_by_trial)
         self.add_content_widget(btn_inspect_trial_by_trial)
 
-        self.__trial_analyser : TrialBlockForceAnalyser | None = None
+        self.__trial_analyser: TrialBlockForceAnalyser | None = None
 
-    def check_analyser(self)-> None:
-        if(self.__trial_analyser is None):
-            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+    def check_analyser(self) -> None:
+        if self.__trial_analyser is None:
+            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd() + "/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
             self.__trial_analyser.run()
 
     def _on_inspect_max_force_clicked(self):
@@ -326,11 +298,11 @@ class SampleChangeReviewPage(ExperimenterPage):
         btn_inspect_trial_by_trial.clicked.connect(self._on_inspect_trial_by_trial)
         self.add_content_widget(btn_inspect_trial_by_trial)
 
-        self.__trial_analyser : TrialBlockForceAnalyser | None = None
+        self.__trial_analyser: TrialBlockForceAnalyser | None = None
 
-    def check_analyser(self)-> None:
-        if(self.__trial_analyser is None):
-            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd()+"/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+    def check_analyser(self) -> None:
+        if self.__trial_analyser is None:
+            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd() + "/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
             self.__trial_analyser.run()
 
     def _on_inspect_max_force_clicked(self):
