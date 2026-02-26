@@ -223,7 +223,7 @@ class VelocityCalibPage(ExperimenterPage):
 
     def _on_show_velocity_analyser_plots(self) -> None:
         if self.vel_calibration_analyser is None:
-             self.log_bus.log("[vel_Cal]: No Velocity Calibration Data To Show!")
+            self.log_bus.log("[vel_Cal]: No Velocity Calibration Data To Show!")
 
         plt.close("all")
 

@@ -3,11 +3,13 @@ import os
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_calib_analyser import VelocityCalibrationAnalyser
+from Pages.experimenter_page import ExperimenterPage
 from Tools.trial_force_analyser import TrialBlockForceAnalyser
+from Tools.velocity_calib_analyser import VelocityCalibrationAnalyser
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
+
 
 class SetupPage(ExperimenterPage):
     participantIdCommitted = QtCore.Signal(str)
@@ -345,9 +347,9 @@ class SetupPage(ExperimenterPage):
 class TrialCheckPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
-        self.set_status("Verify experiment/participant parameters, run some test trials")
-
-
+        self.set_status(
+            "Verify experiment/participant parameters, run some test trials"
+        )
 
 
 class EndTrialsPage(ExperimenterPage):
@@ -357,7 +359,9 @@ class EndTrialsPage(ExperimenterPage):
         lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.add_content_widget(lbl)
 
-        btn_inspect_all_trials = QtWidgets.QPushButton("Inspect force data of last block")
+        btn_inspect_all_trials = QtWidgets.QPushButton(
+            "Inspect force data of last block"
+        )
         btn_inspect_all_trials.clicked.connect(self._on_inspect_max_force_clicked)
         self.add_content_widget(btn_inspect_all_trials)
 
@@ -369,12 +373,16 @@ class EndTrialsPage(ExperimenterPage):
 
     def check_analyser(self) -> None:
         if self.__trial_analyser is None:
-            self.__trial_analyser = TrialBlockForceAnalyser(os.getcwd() + "/Logged_Data/Trial_Force_Data/Tap_Pads_Data")
+            self.__trial_analyser = TrialBlockForceAnalyser(
+                os.getcwd() + "/Logged_Data/Trial_Force_Data/Tap_Pads_Data"
+            )
             self.__trial_analyser.run()
 
     def _on_inspect_max_force_clicked(self):
         self.check_analyser()
-        self.__trial_analyser.plot_scatter_by_sample_id(title="Last block: min force per trial (fast vs slow)")
+        self.__trial_analyser.plot_scatter_by_sample_id(
+            title="Last block: min force per trial (fast vs slow)"
+        )
 
     def _on_inspect_trial_by_trial(self):
         self.check_analyser()

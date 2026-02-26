@@ -3,6 +3,7 @@ from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.calibration_pages import GenericPage, StillCalibPage, VelocityCalibPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
+from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
 from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage, TestTrialsPage
 from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
 from twintig_interface import TwintigInterface
