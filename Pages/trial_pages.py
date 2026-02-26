@@ -6,7 +6,7 @@ from typing import List, Tuple
 from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_calib_analyser import TrialBlockForceAnalyser
+from Tools.trial_force_analyser import TrialBlockForceAnalyser
 
 import ximu3
 from ximu3 import DataLogger

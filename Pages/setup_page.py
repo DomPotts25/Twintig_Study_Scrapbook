@@ -2,7 +2,8 @@ from Pages.experimenter_page import ExperimenterPage
 from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
-from Tools.velocity_calib_analyser import TrialBlockForceAnalyser
+from Tools.velocity_calib_analyser import VelocityCalibrationAnalyser
+from Tools.trial_force_analyser import TrialBlockForceAnalyser
 
 import os
 
