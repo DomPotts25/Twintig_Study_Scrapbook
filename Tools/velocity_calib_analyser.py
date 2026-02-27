@@ -45,21 +45,6 @@ class VelocityCalibrationForceMetrics:
 ###############################################################
 
 
-@dataclass(frozen=True)
-class VelocityCalibrationTrialResult:
-    trial_index: int
-    gesture: str
-    velocity: str
-    start_ts_us: int
-    end_ts_us: int
-    n_samples: int
-    max_force: float
-    min_force: float
-    rise_time_us: Optional[float] = None
-    contact_duration_us: Optional[float] = None
-    peak_slope: Optional[float] = None
-
-
 class VelocityCalibrationAnalyser:
     def __init__(
         self,
@@ -156,7 +141,9 @@ class VelocityCalibrationAnalyser:
         # force_channel_index is 1..8 for CH1..CH8
         ch = int(self.force_channel_index)
         if ch < 1 or ch > 8:
-            raise ValueError(f"force_channel_index must be 1..8, got {self.force_channel_index}")
+            raise ValueError(
+                f"force_channel_index must be 1..8, got {self.force_channel_index}"
+            )
 
         with path.open("r", newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
@@ -339,8 +326,6 @@ class VelocityCalibrationAnalyser:
             conditions.setdefault(gesture, {})[velocity] = vc
 
         return VelocityCalibrationForceMetrics(conditions=conditions)
-
-    # -------------------- Plotting (no pandas) --------------------
 
     def _plot_summary_metric(
         self,
@@ -541,8 +526,108 @@ class VelocityCalibrationAnalyser:
             title="Min Force per Trial by Gesture and Velocity",
             **kwargs,
         )
+    
+    def plot_trial_viewer(
+        self,
+        gesture: Optional[Gestures] = None,
+        velocity: Optional[Velocity] = None,
+        baseline_us: Optional[int] = None,
+    ) -> None:
+        
+        if not self._trials:
+            raise ValueError("No trials loaded. Run analyser first.")
 
-    # -------------------- Begin detection + metric helpers --------------------
+        # Filter trials
+        trials = []
+        for t in self._trials:
+            g = t.get("gesture")
+            v = t.get("velocity")
+            if gesture is not None and g != gesture:
+                continue
+            if velocity is not None and v != velocity:
+                continue
+            # Must have arrays
+            if "timestamps_us" not in t or "force" not in t:
+                continue
+            if t["timestamps_us"] is None or t["force"] is None:
+                continue
+            if len(t["timestamps_us"]) == 0 or len(t["force"]) == 0:
+                continue
+            trials.append(t)
+
+        if not trials:
+            raise ValueError("No matching trials to plot (after filtering).")
+
+        idx = 0
+
+        fig, ax = plt.subplots()
+        (line,) = ax.plot([], [], label="force")
+        vline = None
+        title = ax.set_title("")
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylabel("Force")
+
+        def render(i: int) -> None:
+            nonlocal vline
+            t = trials[i]
+            ts = np.asarray(t["timestamps_us"], dtype=np.int64)
+            f = np.asarray(t["force"], dtype=float)
+
+            # Relative time in ms
+            t0 = ts[0]
+            x_ms = (ts - t0) / 1000.0
+
+            line.set_data(x_ms, f)
+
+            # Autoscale nicely
+            ax.relim()
+            ax.autoscale_view()
+
+            # Optional baseline marker
+            if vline is not None:
+                vline.remove()
+                vline = None
+            if baseline_us is not None:
+                vline = ax.axvline(baseline_us / 1000.0, linestyle="--")
+
+            g = t.get("gesture")
+            v = t.get("velocity")
+            trial_index = t.get("trial_index")
+            max_force = t.get("max_force")
+            rise = t.get("rise_time_us")
+            dur = t.get("contact_duration_us")
+
+            title.set_text(
+                f"Trial {trial_index} | {g.value if hasattr(g,'value') else g} | {v.value if hasattr(v,'value') else v} "
+                f"({i+1}/{len(trials)})\n"
+                f"max={max_force:.3f}  rise_us={rise if rise is not None else 'NA'}  dur_us={dur if dur is not None else 'NA'}"
+            )
+
+            fig.canvas.draw_idle()
+
+        def on_key(event):
+            nonlocal idx
+            if event.key in ("right", "down", "n"):
+                idx = min(idx + 1, len(trials) - 1)
+                render(idx)
+            elif event.key in ("left", "up", "p"):
+                idx = max(idx - 1, 0)
+                render(idx)
+            elif event.key == "home":
+                idx = 0
+                render(idx)
+            elif event.key == "end":
+                idx = len(trials) - 1
+                render(idx)
+            elif event.key in ("q", "escape"):
+                plt.close(fig)
+
+        fig.canvas.mpl_connect("key_press_event", on_key)
+        render(idx)
+        plt.tight_layout()
+        plt.show()
+
+    # -------------------- High pass filter tap detection + metric helpers --------------------
 
     def __detect_begin_index_highpass(
         self,

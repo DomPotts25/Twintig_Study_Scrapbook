@@ -106,11 +106,15 @@ class VelocityCalibPage(ExperimenterPage):
 
         wrap = QtWidgets.QWidget()
         ctrl_row = QtWidgets.QHBoxLayout(wrap)
-        self.btn_vel_calib_plots = QtWidgets.QPushButton(
-            "Show Velocity Calibration Plots"
-        )
+        self.btn_vel_calib_plots = QtWidgets.QPushButton("Show Velocity Calibration Plots")
+        self.btn_inspect_trial_plots = QtWidgets.QPushButton("Inspect Velocity Calibration Trials")
+        self.btn_close_all_plots = QtWidgets.QPushButton("Close All Plots")
         self.btn_vel_calib_plots.clicked.connect(self._on_show_velocity_analyser_plots)
+        self.btn_inspect_trial_plots.clicked.connect(self._on_show_velocity_calib_trial_plots)
+        self.btn_close_all_plots.clicked.connect(self._on_close_all_plots)
         ctrl_row.addWidget(self.btn_vel_calib_plots)
+        ctrl_row.addWidget(self.btn_inspect_trial_plots)
+        ctrl_row.addWidget(self.btn_close_all_plots)
         ctrl_row.setAlignment(QtCore.Qt.AlignCenter)
 
         self.add_content_widget(wrap)
@@ -224,16 +228,30 @@ class VelocityCalibPage(ExperimenterPage):
     def _on_show_velocity_analyser_plots(self) -> None:
         if self.vel_calibration_analyser is None:
             self.log_bus.log("[vel_Cal]: No Velocity Calibration Data To Show!")
-
+            return
+        
         plt.close("all")
 
-        self.vel_calibration_analyser.plot_min_force_trials()
-        self.vel_calibration_analyser.plot_max_force_trials()
+        #self.vel_calibration_analyser.plot_min_force_trials()
+        #self.vel_calibration_analyser.plot_max_force_trials()
         self.vel_calibration_analyser.plot_rise_time_trials()
         self.vel_calibration_analyser.plot_peak_slope_trials()
         self.vel_calibration_analyser.plot_contact_duration_trials()
 
         plt.show(block=False)
+
+    def _on_show_velocity_calib_trial_plots(self) -> None:
+        if self.vel_calibration_analyser is None:
+            self.log_bus.log("[vel_Cal]: No Velocity Calibration Data To Show!")
+            return
+        
+        plt.close("all")
+        self.vel_calibration_analyser.plot_trial_viewer()
+
+        plt.show(block=False)
+
+    def _on_close_all_plots(self) -> None:
+        plt.close("all")
 
     def _on_run_velocity_analyser(self) -> None:
         self.vel_calibration_analyser = VelocityCalibrationAnalyser(
