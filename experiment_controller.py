@@ -105,10 +105,6 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         self.twintig_interface = TwintigInterface()
         self.velocity_calibration: VelocityCalibrationForceMetrics | None = None
-        # This can now be accessed as:
-        # cal = self.get_controller().velocity_calibration
-        # mean = cal.conditions["tap"]["fast"].metrics.rise_time_us.mean
-        # sd   = cal.conditions["tap"]["fast"].metrics.peak_slope.sd
 
         self.setWindowTitle("Twintig Experimenter Window")
         self.resize(1000, 640)
@@ -269,6 +265,21 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
         name = page.page_name  # set in ExperimenterPage.__init__
         self.log_bus.log(f"[ctrl] Entered page: {name}")
         self.pageEntered.emit(name)  # if this needs to be observed elsewhere
+
+        if name == "TestTrials":
+            test_page = self.pages.get("TestTrials")
+            self.set_study_phase(StudyPhases.SANDBOX_TRIALS)
+            if isinstance(test_page, TestTrialsPage):
+                if(self.velocity_calibration is None):
+                    self.pages.get("Velocity_Calib")._on_run_velocity_analyser()
+                test_page.set_velocity_calibration(self.velocity_calibration)
+
+        if name == "Velocity_Calib":
+            self.set_study_phase(StudyPhases.SETUP)
+            vel_calib_page = self.pages.get("Velocity_Calib")
+            if isinstance(vel_calib_page, VelocityCalibPage):
+                if(self.velocity_calibration is None):
+                    vel_calib_page._on_run_velocity_analyser()
 
         if name == "RunTrials":
             self.set_study_phase(StudyPhases.PRE_TRIAL)

@@ -52,6 +52,7 @@ class StudyPhases(str, Enum):
     MIDAIR_CALIBRATION = "midair_calibration"
     VELOCITY_CALIBRATION = "velocity_calibration"
     PRE_TRIAL = "pre_trial"
+    SANDBOX_TRIALS = "sanbox_trials"
     TRIAL = "trial"
     GESTURE_SWITCH = "gesture_switch"
     SAMPLE_SWITCH = "sample_switch"

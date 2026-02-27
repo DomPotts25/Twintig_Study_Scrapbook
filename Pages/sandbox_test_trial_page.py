@@ -12,11 +12,14 @@ from ximu3 import DataLogger
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.experimenter_page import ExperimenterPage
 from Tools.trial_force_analyser import TrialBlockForceAnalyser
-
+from Tools.velocity_calib_analyser import VelocityCalibrationForceMetrics
 
 class TestTrialsPage(ExperimenterPage):
     def __init__(self, name, log_bus):
         super().__init__(name, log_bus)
+
+        self._velocity_calibration: VelocityCalibrationForceMetrics | None = None
+
         self.set_status("Run Test Trials.")
 
         self.lbl_trial = QtWidgets.QLabel("Press Next trial to begin test trials.")
@@ -45,6 +48,8 @@ class TestTrialsPage(ExperimenterPage):
         v.addLayout(row)
         self.add_content_widget(wrap)
 
+        
+        
         # self.btn_begin.clicked.connect(self._on_begin_trials)
         # self.btn_next.clicked.connect(self._on_next_trial)
         # self.btn_end.clicked.connect(self._on_end_trials_clicked)
@@ -57,3 +62,12 @@ class TestTrialsPage(ExperimenterPage):
 
         # self.__forceDataLogger = None
         # self.__current_trial_ctx = None  # dict or None
+
+
+    def set_velocity_calibration(self, calib):
+        self._velocity_calibration = calib
+
+        if calib is None:
+            self.log_bus.log("[TestTrials]: No velocity calibration loaded yet. Please run Velocity_Calib.")
+        else:
+            self.log_bus.log("[TestTrials]: Latest Calibration Data Loaded")

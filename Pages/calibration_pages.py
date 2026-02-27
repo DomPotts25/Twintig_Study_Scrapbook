@@ -120,8 +120,6 @@ class VelocityCalibPage(ExperimenterPage):
         self.add_content_widget(wrap)
 
         self.vel_calibration_analyser = None
-        self._on_run_velocity_analyser()
-
         self._update_ui_state()
 
     def _current_condition(self):
