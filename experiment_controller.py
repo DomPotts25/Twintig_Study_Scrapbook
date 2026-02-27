@@ -3,12 +3,16 @@ from PySide6 import QtCore, QtGui, QtStateMachine, QtWidgets
 from experiment_factors import Gestures, SampleGroup, StudyPhases, Velocity
 from Pages.calibration_pages import GenericPage, StillCalibPage, VelocityCalibPage
 from Pages.experimenter_page import ExperimenterPage, LogBus
-from Pages.setup_page import SetupPage, TrialCheckPage, EndTrialsPage
-from Pages.trial_pages import RunTrialsPage, GestureChangeReviewPage, SampleChangeReviewPage, TestTrialsPage
-from Pages.calibration_pages import StillCalibPage, GenericPage, VelocityCalibPage
-from twintig_interface import TwintigInterface
-from Tools.velocity_calib_analyser import VelocityCalibrationForceMetrics
+from Pages.sandbox_test_trial_page import TestTrialsPage
+from Pages.setup_page import EndTrialsPage, SetupPage, TrialCheckPage
+from Pages.trial_pages import (
+    GestureChangeReviewPage,
+    RunTrialsPage,
+    SampleChangeReviewPage,
+)
 from participant_page import ParticipantWindow
+from Tools.velocity_calib_analyser import VelocityCalibrationForceMetrics
+from twintig_interface import TwintigInterface
 
 QState = QtStateMachine.QState
 QStateMachine = QtStateMachine.QStateMachine
@@ -22,7 +26,14 @@ def add_edge(g, a, b):
 GRAPH = {}
 
 # Setup <-> TrialCheck / StillCalib / ROM_1_Calib / ROM_2_Calib / Midair_Calib
-for tgt in ["TrialCheck", "StillCalib", "ROM_1_Calib", "ROM_2_Calib", "Midair_Calib", "Velocity_Calib"]:
+for tgt in [
+    "TrialCheck",
+    "StillCalib",
+    "ROM_1_Calib",
+    "ROM_2_Calib",
+    "Midair_Calib",
+    "Velocity_Calib",
+]:
     add_edge(GRAPH, "Setup", tgt)
     add_edge(GRAPH, tgt, "Setup")
 
@@ -81,7 +92,7 @@ PAGE_CLASS = {
     "Velocity_Calib": VelocityCalibPage,
     "GestureChange": GestureChangeReviewPage,
     "SampleChange": SampleChangeReviewPage,
-    "EndTrials": EndTrialsPage
+    "EndTrials": EndTrialsPage,
 }
 
 
@@ -94,7 +105,7 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         self.twintig_interface = TwintigInterface()
         self.velocity_calibration: VelocityCalibrationForceMetrics | None = None
-        # This can now be accessed as: 
+        # This can now be accessed as:
         # cal = self.get_controller().velocity_calibration
         # mean = cal.conditions["tap"]["fast"].metrics.rise_time_us.mean
         # sd   = cal.conditions["tap"]["fast"].metrics.peak_slope.sd
@@ -146,7 +157,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             still.calibrationDone.connect(setup.on_calibration_done)
 
         still = self.pages.get("Velocity_Calib")
-        if isinstance(still, VelocityCalibPage) and hasattr(setup, "on_calibration_done"):
+        if isinstance(still, VelocityCalibPage) and hasattr(
+            setup, "on_calibration_done"
+        ):
             still.calibrationDone.connect(setup.on_calibration_done)
 
         for p in self.pages.values():
@@ -178,15 +191,21 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
         # Wire visible nav buttons
         for src, page in self.pages.items():
-            page.navRequested.connect(lambda target, s=src: self._handle_nav_click(s, target))
+            page.navRequested.connect(
+                lambda target, s=src: self._handle_nav_click(s, target)
+            )
             if src in MAIN_BACK and page.back_button:
                 back_tgt = MAIN_BACK[src]
-                page.backRequested.connect(lambda s=src, t=back_tgt: self._emit_edge(s, t))
+                page.backRequested.connect(
+                    lambda s=src, t=back_tgt: self._emit_edge(s, t)
+                )
 
         # Controller-driven transitions from RunTrials
         run_trials = self.pages.get("RunTrials")
         if isinstance(run_trials, RunTrialsPage):
-            run_trials.requestTransition.connect(lambda tgt: self._emit_edge("RunTrials", tgt))
+            run_trials.requestTransition.connect(
+                lambda tgt: self._emit_edge("RunTrials", tgt)
+            )
 
         self.machine.setInitialState(self.states[start_page])
         self.machine.start()
@@ -230,8 +249,12 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
 
     def set_velocity_calibration(self, calib_data: dict):
         self.velocity_calibration = calib_data
-        total_conditions = sum(len(velocity_map) for velocity_map in calib_data.conditions.values())
-        self.log_bus.log(f"[ctrl] Velocity calibration loaded ({total_conditions} conditions)")
+        total_conditions = sum(
+            len(velocity_map) for velocity_map in calib_data.conditions.values()
+        )
+        self.log_bus.log(
+            f"[ctrl] Velocity calibration loaded ({total_conditions} conditions)"
+        )
 
         for gesture, velocity_map in calib_data.conditions.items():
             velocities = ", ".join(v.name for v in velocity_map.keys())
@@ -268,7 +291,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
                 p.set_trial_id(self.curr_trial_id)
                 p.set_gesture(self.curr_gesture)
 
-    def start_next_trial(self, trial_id: int, sample_group: SampleGroup, sample_id: int, sample_name: str):
+    def start_next_trial(
+        self, trial_id: int, sample_group: SampleGroup, sample_id: int, sample_name: str
+    ):
         self.set_study_phase(StudyPhases.RUN_TRIALS)
         self.set_trial_id(trial_id)
         self.set_sample_group(sample_group)
@@ -322,7 +347,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             labels.append(getattr(g, "name", str(g)))
 
         if labels:
-            self.log_bus.log("[ctrl] Gesture order for this participant: " + " → ".join(labels))
+            self.log_bus.log(
+                "[ctrl] Gesture order for this participant: " + " → ".join(labels)
+            )
         else:
             self.log_bus.log("[ctrl] Gesture order for this participant: (empty)")
 
@@ -340,7 +367,9 @@ class ExperimenterWindow(QtWidgets.QMainWindow):
             labels.append(getattr(s, "name", str(s)))
 
         if labels:
-            self.log_bus.log("[ctrl] Sample order for this participant: " + " → ".join(labels))
+            self.log_bus.log(
+                "[ctrl] Sample order for this participant: " + " → ".join(labels)
+            )
         else:
             self.log_bus.log("[ctrl] Sample order for this participant: (empty)")
 
